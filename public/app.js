@@ -17,6 +17,7 @@ const COLORS = {
   chain: "#11161d",
   chainLink: "#6c7784",
   hazard: "#ffb33f",
+  pull: "#65d6ff",
   danger: "#ff5a5f",
   text: "#f4f7fb",
   muted: "#9aa7b5",
@@ -307,7 +308,6 @@ function drawStone(stone) {
 function drawLabel(text, x, y, color) {
   ctx.fillStyle = color;
   ctx.font = "700 14px Inter, system-ui, sans-serif";
-  ctx.letterSpacing = "0.06em";
   ctx.fillText(text, x, y);
 }
 
@@ -336,7 +336,7 @@ function drawToolGhosts() {
   ctx.strokeRect(492, 116, 62, 26);
   drawLabel("HAMMER", 474, 252, COLORS.hazard);
 
-  ctx.strokeStyle = COLORS.accent2;
+  ctx.strokeStyle = COLORS.pull;
   ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.arc(690, 185, 36, -0.2, Math.PI * 1.55);
@@ -345,7 +345,7 @@ function drawToolGhosts() {
   ctx.moveTo(724, 196);
   ctx.lineTo(772, 226);
   ctx.stroke();
-  drawLabel("PULL", 678, 252, COLORS.muted);
+  drawLabel("PULL", 678, 252, COLORS.pull);
 
   ctx.restore();
 }
