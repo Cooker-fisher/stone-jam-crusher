@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stone Jam Crusher / 石詰まり職人</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Browser Prototype v0.1</p>
+          <h1>Stone Jam Crusher <span>/ 石詰まり職人</span></h1>
+          <p class="lead">粉砕機を止めるな。石を読め。詰まりを抜け。</p>
+        </div>
+        <div class="status-card" aria-label="game status">
+          <div>
+            <span class="label">TIME</span>
+            <strong id="timeValue">60</strong>
+          </div>
+          <div>
+            <span class="label">TONS</span>
+            <strong id="tonsValue">0.0t</strong>
+          </div>
+          <div>
+            <span class="label">JAM</span>
+            <strong id="jamValue">NONE</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="game-panel" aria-label="stone crusher game area">
+        <canvas id="gameCanvas" width="1200" height="620" aria-label="crusher line canvas"></canvas>
+        <div class="overlay-note">
+          <strong>STATIC SCENE</strong>
+          <span>次のPRで石の流れと詰まり判定を追加</span>
+        </div>
+      </section>
+
+      <section class="control-panel" aria-label="tool controls">
+        <button class="tool-button active" type="button" data-tool="hammer">
+          <span class="tool-icon">🔨</span>
+          <span>
+            <strong>Hammer</strong>
+            <small>叩いて割る</small>
+          </span>
+        </button>
+        <button class="tool-button" type="button" data-tool="hook">
+          <span class="tool-icon">⛓️</span>
+          <span>
+            <strong>Hook / Pull</strong>
+            <small>輪をかけて引く</small>
+          </span>
+        </button>
+        <button class="tool-button" type="button" data-tool="small-stone">
+          <span class="tool-icon">🪨</span>
+          <span>
+            <strong>Add Small Stone</strong>
+            <small>押し込み・悪化リスク</small>
+          </span>
+        </button>
+        <button class="tool-button" type="button" data-tool="stop">
+          <span class="tool-icon">⏸</span>
+          <span>
+            <strong>Stop / Restart</strong>
+            <small>安全だが稼働率低下</small>
+          </span>
+        </button>
+      </section>
+
+      <section class="design-note">
+        <h2>v0.1の狙い</h2>
+        <p>
+          まずは「石供給口 → チェーンコンベア → ホッパー → 粉砕機」の画面を作り、
+          石詰まり解除ゲームとして成立する視覚構造を確認する。物理演算・詰まり解除ロジックは次段階で追加する。
+        </p>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
