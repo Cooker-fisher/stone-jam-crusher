@@ -2,80 +2,37 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Stone Jam Crusher / 石詰まり職人</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#2b2118" />
+    <title>Stone Crusher Tycoon / 石くだき工場</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main class="app-shell">
-      <header class="hero">
-        <div>
-          <p class="eyebrow">Browser Prototype v0.4 / Flowing Stones</p>
-          <h1>Stone Jam Crusher <span>/ 石詰まり職人</span></h1>
-          <p class="lead">粉砕機を止めるな。石を読め。詰まりを抜け。</p>
+    <div id="app">
+      <header id="hud">
+        <div class="money">
+          <span class="coin">¥</span><strong id="money">0</strong>
         </div>
-        <div class="status-card" aria-label="game status">
-          <div>
-            <span class="label">TIME</span>
-            <strong id="timeValue">60</strong>
-          </div>
-          <div>
-            <span class="label">TONS</span>
-            <strong id="tonsValue">0.0t</strong>
-          </div>
-          <div>
-            <span class="label">JAM</span>
-            <strong id="jamValue">NONE</strong>
-          </div>
+        <div class="rates">
+          <div class="persec"><span id="perSec">0</span> /秒 自動</div>
+          <div class="stone">投入中：<span id="stoneName">小石</span></div>
         </div>
       </header>
 
-      <section class="game-panel" aria-label="stone crusher game area">
-        <canvas id="gameCanvas" width="1200" height="620" aria-label="crusher line canvas"></canvas>
-        <div class="overlay-note">
-          <strong>PLAY VIEWPOINT</strong>
-          <span>粉砕機＝左下。石は右から左へ流れ、粉砕口で詰まる。</span>
-        </div>
-      </section>
+      <main id="stage">
+        <canvas id="game"></canvas>
+        <div id="tapHint">タップで砕く！</div>
+      </main>
 
-      <section class="control-panel" aria-label="tool controls">
-        <button class="tool-button active" type="button" data-tool="hammer">
-          <span class="tool-icon">🔨</span>
-          <span>
-            <strong>Hammer</strong>
-            <small>叩いて割る</small>
-          </span>
-        </button>
-        <button class="tool-button" type="button" data-tool="hook">
-          <span class="tool-icon">⛓️</span>
-          <span>
-            <strong>Hook / Pull</strong>
-            <small>輪をかけて引く</small>
-          </span>
-        </button>
-        <button class="tool-button" type="button" data-tool="small-stone">
-          <span class="tool-icon">🪨</span>
-          <span>
-            <strong>Add Small Stone</strong>
-            <small>押し込み・悪化リスク</small>
-          </span>
-        </button>
-        <button class="tool-button" type="button" data-tool="stop">
-          <span class="tool-icon">⏸</span>
-          <span>
-            <strong>Stop / Restart</strong>
-            <small>安全だが稼働率低下</small>
-          </span>
-        </button>
-      </section>
+      <nav id="tabs">
+        <button class="tab active" type="button" data-cat="設備">⚙️ 設備</button>
+        <button class="tab" type="button" data-cat="人員">👷 人員</button>
+      </nav>
 
-      <section class="design-note">
-        <h2>v0.4の狙い：石の流れ</h2>
-        <p>
-          ビューポイントはそのままに、石が動き出した。石は右端から供給され、傾いたシュートを<strong>右から左へ</strong>流れ、小石・中石・大石が入り混じって<strong>粉砕口で粉砕</strong>される（砂塵が舞い、処理トン数 TONS が増える）。フライホイールも回転する。次段階で詰まり（ジャム）判定とハンマー／フック等のツール操作、60秒スコアアタックを載せる。
-        </p>
-      </section>
-    </main>
+      <section id="shop" aria-label="upgrades"></section>
+    </div>
+
+    <div id="welcome" class="toast hidden"></div>
 
     <script src="./app.js"></script>
   </body>

@@ -1,72 +1,48 @@
-# Stone Jam Crusher / 石詰まり職人
+# Stone Crusher Tycoon / 石くだき工場
 
-A browser game prototype about clearing rock jams in a crusher line.
+A mobile-first (portrait) **idle / clicker** game. Run a stone‑crushing plant:
+tap to crush rocks, and upgrade your **equipment (設備)** and **crew (人員)** so the
+crusher keeps breaking bigger, stronger, more valuable stones — even while
+you're away.
 
-## One-line Concept
+## Play
 
-**粉砕機を止めるな。石を読め。詰まりを抜け。**
+- Live (GitHub Pages): https://cooker-fisher.github.io/stone-jam-crusher/
+- Or open `public/index.html` in any browser.
 
-This is not just a rock-crushing game.
-The core game is diagnosing rock jams and choosing the right field response.
+## Core loop
 
-## Core Game Loop
+1. A jaw crusher is fed by a pile (mass) of rocks.
+2. **Tap** the glowing rock wedged in the throat to crush it (manual power).
+3. The crusher **auto-crushes** over time (idle) — and keeps earning while the
+   game is closed (offline income on return).
+4. Crushing earns **¥**. Spend ¥ on upgrades:
+   - **設備 (equipment)**: 鋼鉄ジョー / フライホイール / モーター … → more tap power & auto rate
+   - **人員 (personnel)**: 作業員 / ハンマー職人 / 重機オペレーター / 親方 … → more auto rate & a global ×multiplier
+5. Stones get bigger and harder as you progress
+   (砂利 → 小石 → … → 巨岩 → 隕石), paying out more ¥.
 
-1. Stones flow into the crusher line.
-2. A stone jams at the chain conveyor or hopper/crusher inlet.
-3. The player identifies why it jammed.
-4. The player chooses a tool: hammer, hook/chain pull, small-stone push, or stop/restart.
-5. The jam clears, worsens, or damages the machine.
-6. The line resumes and the score increases.
+## Tech
 
-## MVP Goal
+- Vanilla **HTML / CSS / JS + Canvas**. No build step, no dependencies.
+- **Portrait, responsive, touch-first** (designed for phones).
+- Progress saved to `localStorage`; offline earnings applied on load.
+- All tuning lives in the `CONFIG` / `UPGRADES` objects at the top of `public/app.js`.
 
-Build a 60-second browser prototype where the player processes as much stone as possible while preventing or clearing jams.
-
-## MVP Platform
-
-Start with a lightweight browser game:
-
-- HTML
-- CSS
-- JavaScript
-- Canvas
-- No heavy framework at first
-
-After the MVP proves fun, the game can become:
-
-- PWA
-- iOS/Android via Capacitor
-- Phaser-based browser game
-- Unity game only if 2D prototype proves strong
-
-## Initial Folder Plan
+## Files
 
 ```text
-stone-jam-crusher/
-  README.md
-  docs/
-    game-design.md
-    mvp-spec.md
-    implementation-plan.md
-    codex-instructions.md
-  public/
-    index.html
-    style.css
-    app.js
-  assets/
-    sounds/
-    images/
+public/
+  index.html   # portrait shell: HUD + canvas stage + shop
+  style.css     # mobile-first dark industrial UI
+  app.js        # game loop, economy, save/offline, jaw-crusher renderer
+.github/workflows/deploy-pages.yml  # auto-deploys public/ to GitHub Pages on push
+docs/           # earlier design notes (see below)
 ```
 
-## Design Principle
+## Note on direction
 
-Do not make this a simple clicker.
-
-The fun must come from field judgment:
-
-- This stone should be hammered.
-- This stone should be pulled.
-- This jam gets worse if small stones are added.
-- This layered stone breaks only when hit along the grain.
-
-The game should look silly and simple, but the decision-making should feel surprisingly real.
+This project began as a *jam-clearing field puzzle* (the `docs/` files still
+describe that earlier concept). It has since pivoted to an **idle / clicker
+tycoon** — tap + automate + upgrade to crush ever-bigger stones. The `docs/`
+will be updated to match.
