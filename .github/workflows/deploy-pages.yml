@@ -1,0 +1,43 @@
+# Publish the play-screen prototype to GitHub Pages so it can be viewed in a
+# browser. Serves the static files in public/ via the official Pages actions.
+# Runs on pushes to the development branch and can be triggered manually.
+name: Deploy play screen to GitHub Pages
+
+on:
+  push:
+    branches: ["claude/upbeat-hamilton-2jC30"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; newer runs supersede in-progress ones.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages (enable if needed)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload static site (public/)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
