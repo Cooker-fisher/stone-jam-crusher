@@ -10,7 +10,7 @@
     <main class="app-shell">
       <header class="hero">
         <div>
-          <p class="eyebrow">Browser Prototype v0.2 / Desert Mood Pass</p>
+          <p class="eyebrow">Browser Prototype v0.3 / Crusher Viewpoint</p>
           <h1>Stone Jam Crusher <span>/ 石詰まり職人</span></h1>
           <p class="lead">粉砕機を止めるな。石を読め。詰まりを抜け。</p>
         </div>
@@ -33,8 +33,8 @@
       <section class="game-panel" aria-label="stone crusher game area">
         <canvas id="gameCanvas" width="1200" height="620" aria-label="crusher line canvas"></canvas>
         <div class="overlay-note">
-          <strong>DUSTY STATIC SCENE</strong>
-          <span>次のPRで石の流れ・詰まり判定・手動介入演出を追加</span>
+          <strong>PLAY VIEWPOINT</strong>
+          <span>粉砕機＝左下。石は右から左へ流れ、粉砕口で詰まる。</span>
         </div>
       </section>
 
@@ -70,9 +70,9 @@
       </section>
 
       <section class="design-note">
-        <h2>v0.2の狙い</h2>
+        <h2>v0.3の狙い：プレー画面のビューポイント</h2>
         <p>
-          砂漠の古い砕石場らしい色・質感へ寄せ、ジャムが起きる2つの危険点（チェーン/ホッパー喉）を視覚的に強調する。物理演算・解除ロジックは次段階で追加する。
+          実機動画の視点に合わせて配置を組み直した。<strong>左下に粉砕機（フライホイール）</strong>、石は<strong>右から左へ</strong>傾いたシュートを流れ、小石→中石→大石と大きくなりながら粉砕口へ向かい、大きな石がそこで詰まる。まずは静止画でこの視点をほぼ再現する段階。次段階で石の流れ・詰まり判定・ツール操作を載せる。
         </p>
       </section>
     </main>
