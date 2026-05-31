@@ -1,11 +1,12 @@
-// Stone Jam Crusher — play-screen viewpoint
+// Stone Jam Crusher — play-screen viewpoint + flowing stones
 // Reference viewpoint (real crusher videos):
 //   - 粉砕機 / crusher sits in the BOTTOM-LEFT (big flywheel + housing).
 //   - Stones feed from the RIGHT and flow toward the LEFT, down a sloped
 //     chute, getting larger (小石 → 中石 → 大石) until they reach the
-//     crusher throat where the big ones jam.
-// This pass rebuilds the static scene to match that viewpoint. Flow,
-// jam logic and tool interactions are layered on in later steps.
+//     crusher throat where they are crushed.
+// This pass adds motion on top of the static scene: stones spawn off the
+// right, slide down-left along the chute, and are crushed at the throat
+// (processed tons tick up, dust bursts). Jam logic and tools come next.
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -19,6 +20,22 @@ const HUD = {
 const SCENE = {
   width: 1200,
   height: 620,
+};
+
+// All gameplay tunables live here (per project rules).
+const CONFIG = {
+  flowSpeed: 64, // px/sec the conveyor carries stones leftward
+  spawnX: 1245, // stones appear just off the right edge
+  crushX: 470, // stone is crushed once its center reaches the throat
+  minGap: 34, // spacing range between consecutive stones
+  maxGap: 104,
+  flywheelSpin: 1.8, // rad/sec
+  tonsPerArea: 0.0002, // processed-tons contribution from stone size^2
+  sizeBuckets: [
+    { min: 12, max: 22, weight: 4 }, // 小石
+    { min: 26, max: 46, weight: 4 }, // 中石
+    { min: 52, max: 92, weight: 2 }, // 大石
+  ],
 };
 
 const COLORS = {
@@ -42,31 +59,156 @@ const COLORS = {
   alert: "#9d3a26",
 };
 
+const STONE_TYPES = ["round", "angular", "hard", "layered", "flat"];
+const STONE_COLORS = [
+  "#9c8c72",
+  "#8d7d66",
+  "#857458",
+  "#7c6c55",
+  "#6b5d4c",
+  "#7d6a51",
+  "#6a5b48",
+  "#5b5044",
+  "#8a785d",
+];
+
 // Sloped feed-chute surface: stones rest on the line from the throat
 // (lower-left) up to the off-screen feed (upper-right).
 function chuteSurfaceY(x) {
   return 524.35 - 0.2284 * x;
 }
 
-// Stones laid out right -> left, small -> large, ending in a jam boulder
-// wedged in the crusher throat. y is derived from the chute unless fixed.
-const stones = [
-  { x: 1150, size: 15, type: "round", c: "#9c8c72", seed: 1 }, // 小石
-  { x: 1120, size: 19, type: "angular", c: "#8d7d66", seed: 2 },
-  { x: 1085, size: 13, type: "round", c: "#a89677", seed: 3 },
-  { x: 1040, size: 30, type: "round", c: "#857458", seed: 4 }, // 中石
-  { x: 985, size: 26, type: "angular", c: "#7c6c55", seed: 5 },
-  { x: 928, size: 44, type: "hard", c: "#6b5d4c", seed: 6 },
-  { x: 848, size: 52, type: "layered", c: "#7d6a51", seed: 7 },
-  { x: 748, size: 66, type: "angular", c: "#6a5b48", seed: 8 }, // 大石
-  { x: 636, size: 84, type: "hard", c: "#5b5044", seed: 9 },
-  { x: 548, size: 60, type: "flat", c: "#8a785d", seed: 11, rot: -0.15 },
-  { x: 452, y: 388, size: 104, type: "hard", c: "#4a4136", seed: 10, rot: 0.12 }, // throat jam
-];
+// --- dynamic flow state -----------------------------------------------------
+const stones = [];
+const particles = [];
+let tons = 0;
+let flywheelAngle = 0;
+let queued = null; // next stone, pre-built so we know its size for spacing
+let nextGap = 0;
+let stoneSeq = 0;
 
-stones.forEach((stone) => {
-  if (stone.y == null) stone.y = chuteSurfaceY(stone.x) - stone.size * 0.55;
-});
+function rand(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function weightedPick(items) {
+  const total = items.reduce((sum, item) => sum + item.weight, 0);
+  let roll = Math.random() * total;
+  for (const item of items) {
+    roll -= item.weight;
+    if (roll <= 0) return item;
+  }
+  return items[items.length - 1];
+}
+
+// Horizontal half-extent of a stone (flat stones are stretched wide).
+function stoneReach(stone) {
+  return stone.size * (stone.type === "flat" ? 1.5 : 1);
+}
+
+function makeStone() {
+  const bucket = weightedPick(CONFIG.sizeBuckets);
+  const size = rand(bucket.min, bucket.max);
+  const type = STONE_TYPES[Math.floor(Math.random() * STONE_TYPES.length)];
+  const c = STONE_COLORS[Math.floor(Math.random() * STONE_COLORS.length)];
+  const x = CONFIG.spawnX;
+  return {
+    x,
+    y: chuteSurfaceY(x) - size * 0.55,
+    size,
+    type,
+    c,
+    seed: (stoneSeq += 1) * 1.37,
+    rot: (Math.random() - 0.5) * 0.5,
+  };
+}
+
+// Pre-fill the chute so the line never starts empty.
+function seedStones() {
+  let x = CONFIG.crushX + 90;
+  while (x < CONFIG.spawnX - 70) {
+    const stone = makeStone();
+    stone.x = x;
+    stone.y = chuteSurfaceY(x) - stone.size * 0.55;
+    stones.push(stone);
+    x += stoneReach(stone) + rand(CONFIG.minGap + 30, CONFIG.maxGap + 40);
+  }
+}
+
+// Spawn the next stone once the rightmost one has cleared enough room.
+function maybeSpawn() {
+  if (!queued) {
+    queued = makeStone();
+    nextGap = rand(CONFIG.minGap, CONFIG.maxGap);
+  }
+  const last = stones.length ? stones[stones.length - 1] : null;
+  const need = (last ? stoneReach(last) : 0) + queued.size + nextGap;
+  if (!last || last.x <= CONFIG.spawnX - need) {
+    queued.x = CONFIG.spawnX;
+    queued.y = chuteSurfaceY(queued.x) - queued.size * 0.55;
+    stones.push(queued);
+    queued = null;
+  }
+}
+
+function crushStone(stone) {
+  tons += stone.size * stone.size * CONFIG.tonsPerArea;
+  HUD.tons.textContent = `${tons.toFixed(1)}t`;
+  spawnCrushParticles(stone);
+}
+
+function spawnCrushParticles(stone) {
+  const cx = CONFIG.crushX;
+  const cy = chuteSurfaceY(cx) + 6;
+  const count = 8 + Math.floor(stone.size / 7);
+  for (let i = 0; i < count; i += 1) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6;
+    const speed = rand(40, 70 + stone.size * 1.6);
+    const dust = Math.random() < 0.6;
+    particles.push({
+      x: cx + rand(-12, 12),
+      y: cy + rand(-14, 6),
+      vx: Math.cos(a) * speed - 25,
+      vy: Math.sin(a) * speed,
+      life: rand(0.4, 0.95),
+      maxLife: 0.95,
+      r: dust ? rand(3, 8) : rand(2, 5),
+      dust,
+      c: stone.c,
+    });
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i -= 1) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 430 * dt;
+    p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function update(dt) {
+  flywheelAngle += CONFIG.flywheelSpin * dt;
+
+  for (const stone of stones) {
+    stone.x -= CONFIG.flowSpeed * dt;
+    stone.y = chuteSurfaceY(stone.x) - stone.size * 0.55;
+    stone.rot += CONFIG.flowSpeed * dt * 0.0016;
+  }
+
+  for (let i = stones.length - 1; i >= 0; i -= 1) {
+    if (stones[i].x <= CONFIG.crushX) {
+      crushStone(stones[i]);
+      stones.splice(i, 1);
+    }
+  }
+
+  maybeSpawn();
+  updateParticles(dt);
+}
 
 function rnd(seed) {
   const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
@@ -199,7 +341,7 @@ function drawCrusherBody() {
   ctx.fillRect(210, 480, 8, 110);
 }
 
-function drawFlywheel() {
+function drawFlywheel(angle) {
   const cx = 150;
   const cy = 592;
   const r = 172;
@@ -223,10 +365,11 @@ function drawFlywheel() {
   ctx.arc(cx, cy, r * 0.7, 0, Math.PI * 2);
   ctx.stroke();
 
+  // spokes spin with the wheel
   ctx.strokeStyle = "#241b14";
   ctx.lineWidth = 26;
   for (let k = 0; k < 4; k += 1) {
-    const a = (k * Math.PI) / 2 + 0.4;
+    const a = (k * Math.PI) / 2 + 0.4 + angle;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(cx + Math.cos(a) * r * 0.74, cy + Math.sin(a) * r * 0.74);
@@ -244,15 +387,18 @@ function drawFlywheel() {
 
   ctx.fillStyle = "#241b14";
   for (let k = 0; k < 16; k += 1) {
-    const a = (k * Math.PI) / 8;
+    const a = (k * Math.PI) / 8 + angle;
     ctx.beginPath();
     ctx.arc(cx + Math.cos(a) * r * 0.88, cy + Math.sin(a) * r * 0.88, 6, 0, Math.PI * 2);
     ctx.fill();
   }
 
+  // rust wear mark rotates with the rim
+  const rustAng = Math.atan2(-40, 90) + angle;
+  const rustR = Math.hypot(90, 40);
   ctx.fillStyle = "rgba(143, 76, 42, 0.35)";
   ctx.beginPath();
-  ctx.ellipse(cx + 90, cy - 40, 30, 80, 0.5, 0, Math.PI * 2);
+  ctx.ellipse(cx + Math.cos(rustAng) * rustR, cy + Math.sin(rustAng) * rustR, 30, 80, 0.5 + angle, 0, Math.PI * 2);
   ctx.fill();
 
   // drive belt heading off toward the motor
@@ -525,6 +671,18 @@ function drawChain() {
   }
 }
 
+function drawParticles() {
+  for (const p of particles) {
+    const alpha = Math.max(0, p.life / p.maxLife);
+    ctx.globalAlpha = alpha * (p.dust ? 0.6 : 1);
+    ctx.fillStyle = p.dust ? "#d6be8e" : p.c;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
 function drawDustHaze() {
   const spots = [
     [430, 470, 120],
@@ -565,12 +723,13 @@ function drawScene() {
   drawBackground();
   drawOverheadBeam();
   drawCrusherBody();
-  drawFlywheel();
+  drawFlywheel(flywheelAngle);
   drawFeedChute();
   drawHopperThroat();
   drawGrating();
   drawWorker();
   stones.forEach(drawRock);
+  drawParticles();
   drawChain();
   drawDustHaze();
   drawLabels();
@@ -586,5 +745,15 @@ function setupToolButtons() {
   });
 }
 
-drawScene();
+let lastT = 0;
+function frame(t) {
+  const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0;
+  lastT = t;
+  update(dt);
+  drawScene();
+  requestAnimationFrame(frame);
+}
+
+seedStones();
 setupToolButtons();
+requestAnimationFrame(frame);
