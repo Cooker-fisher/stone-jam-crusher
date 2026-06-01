@@ -3,37 +3,50 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#2b2118" />
-    <title>Stone Crusher Tycoon / 石くだき工場</title>
+    <meta name="theme-color" content="#1d160e" />
+    <title>Stone Crusher 3D / 石くだき工場</title>
     <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three.module.js",
+          "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js"
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="app">
+      <canvas id="scene"></canvas>
+
       <header id="hud">
-        <div class="money">
-          <span class="coin">¥</span><strong id="money">0</strong>
-        </div>
-        <div class="rates">
-          <div class="persec"><span id="perSec">0</span> /秒 自動</div>
-          <div class="stone">投入中：<span id="stoneName">小石</span></div>
-        </div>
+        <div class="money"><span class="coin">¥</span><strong id="money">0</strong></div>
+        <div class="rates"><span id="perSec">0</span> /秒　<span class="stone" id="stoneName">小石</span></div>
       </header>
 
-      <main id="stage">
-        <canvas id="game"></canvas>
-        <div id="tapHint">タップで砕く！</div>
-      </main>
+      <div id="hint">ドラッグで回転 ・ 石をタップで砕く</div>
 
-      <nav id="tabs">
-        <button class="tab active" type="button" data-cat="設備">⚙️ 設備</button>
-        <button class="tab" type="button" data-cat="人員">👷 人員</button>
-      </nav>
+      <section id="shop">
+        <button class="item" data-id="tap">
+          <span class="ic">🔨</span>
+          <span class="info"><b>叩く力 <em id="tap-own">x0</em></b><small>タップの破砕力 +1</small></span>
+          <span class="cost">¥<i id="tap-cost">15</i></span>
+        </button>
+        <button class="item" data-id="auto">
+          <span class="ic">⚙️</span>
+          <span class="info"><b>自動破砕 <em id="auto-own">x0</em></b><small>自動 +1 /秒</small></span>
+          <span class="cost">¥<i id="auto-cost">25</i></span>
+        </button>
+        <button class="item" data-id="boss">
+          <span class="ic">🧑‍🏭</span>
+          <span class="info"><b>親方 <em id="boss-own">x0</em></b><small>全産出 ×1.15</small></span>
+          <span class="cost">¥<i id="boss-cost">500</i></span>
+        </button>
+      </section>
 
-      <section id="shop" aria-label="upgrades"></section>
+      <div id="loading">3D読み込み中…</div>
     </div>
 
-    <div id="welcome" class="toast hidden"></div>
-
-    <script src="./app.js"></script>
+    <script type="module" src="./app.js"></script>
   </body>
 </html>
