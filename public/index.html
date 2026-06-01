@@ -10,7 +10,8 @@
       {
         "imports": {
           "three": "./vendor/three.module.js",
-          "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js"
+          "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js",
+          "cannon-es": "./vendor/cannon-es.js"
         }
       }
     </script>
@@ -21,21 +22,21 @@
 
       <header id="hud">
         <div class="money"><span class="coin">¥</span><strong id="money">0</strong></div>
-        <div class="rates"><span id="perSec">0</span> /秒　<span class="stone" id="stoneName">小石</span></div>
+        <div class="rates">砕いた <span id="crushed">0</span> ・ 投入 <span id="feedrate">1.0</span>/秒</div>
       </header>
 
       <div id="hint">ドラッグで回転 ・ 石をタップで砕く</div>
 
       <section id="shop">
-        <button class="item" data-id="tap">
-          <span class="ic">🔨</span>
-          <span class="info"><b>叩く力 <em id="tap-own">x0</em></b><small>タップの破砕力 +1</small></span>
-          <span class="cost">¥<i id="tap-cost">15</i></span>
+        <button class="item" data-id="feed">
+          <span class="ic">🚚</span>
+          <span class="info"><b>投入速度 <em id="feed-own">x0</em></b><small>石が速く流れてくる</small></span>
+          <span class="cost">¥<i id="feed-cost">15</i></span>
         </button>
-        <button class="item" data-id="auto">
-          <span class="ic">⚙️</span>
-          <span class="info"><b>自動破砕 <em id="auto-own">x0</em></b><small>自動 +1 /秒</small></span>
-          <span class="cost">¥<i id="auto-cost">25</i></span>
+        <button class="item" data-id="value">
+          <span class="ic">💎</span>
+          <span class="info"><b>破砕の価値 <em id="value-own">x0</em></b><small>石1個の¥ +1</small></span>
+          <span class="cost">¥<i id="value-cost">25</i></span>
         </button>
         <button class="item" data-id="boss">
           <span class="ic">🧑‍🏭</span>
@@ -65,7 +66,7 @@
         true
       );
       try {
-        await import("./app.js?v=3d-3");
+        await import("./app.js?v=3d-4");
       } catch (e) {
         show((e && (e.stack || e.message)) || String(e));
       }
