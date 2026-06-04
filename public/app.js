@@ -93,7 +93,7 @@ function rockMesh(radius, sx, sy, sz) {
 
 // ---------------------------------------------------------------- machine visuals
 const machine = new THREE.Group(); scene.add(machine);
-machine.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.6, 3.2), matSteelDark), { position: new THREE.Vector3(0, 0.3, 0), castShadow: true, receiveShadow: true }));
+const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.6, 3.2), matSteelDark); baseMesh.position.y = 0.3; baseMesh.castShadow = baseMesh.receiveShadow = true; machine.add(baseMesh);
 const body = new THREE.Mesh(new THREE.BoxGeometry(2.9, 2.0, 2.6), matSteel); body.position.y = 1.4; body.castShadow = body.receiveShadow = true; machine.add(body);
 const hopper = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 0.7, 1.6, 4, 1, true), new THREE.MeshStandardMaterial({ color: 0x7a6650, roughness: 0.6, metalness: 0.45, side: THREE.DoubleSide }));
 hopper.position.y = 3.4; hopper.rotation.y = Math.PI / 4; hopper.castShadow = true; machine.add(hopper);
@@ -110,7 +110,7 @@ for (const e of [-1, 1]) { const roller = new THREE.Mesh(new THREE.CylinderGeome
 
 // hammer (swings down onto the bin on each strike)
 const hammer = new THREE.Group(); hammer.position.set(0, 3.95, 0.2); scene.add(hammer);
-hammer.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8), new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.85 })), { position: new THREE.Vector3(0, -0.75, 0) }));
+const hHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8), new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.85 })); hHandle.position.y = -0.75; hammer.add(hHandle);
 const hHead = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.36, 0.36), matSteel); hHead.position.set(0, -1.5, 0); hHead.castShadow = true; hammer.add(hHead);
 let hammerT = 1;
 hammer.rotation.z = -1.0;
@@ -128,7 +128,7 @@ function makeWorker(i) {
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), workerMatHat); head.position.y = 1.02; head.castShadow = true; g.add(head);
   const arm = new THREE.Group(); arm.position.set(0.12, 0.85, 0.16); g.add(arm);
   const mallet = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6, 6), new THREE.MeshStandardMaterial({ color: 0x5a3f25, roughness: 0.9 })); mallet.position.set(0, -0.3, 0); arm.add(mallet);
-  arm.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.14), matSteel), { position: new THREE.Vector3(0, -0.6, 0) }));
+  const malletHead = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.14), matSteel); malletHead.position.set(0, -0.6, 0); arm.add(malletHead);
   arm.rotation.x = -1.2; g.userData.arm = arm; g.userData.swing = 1;
   scene.add(g); return g;
 }
