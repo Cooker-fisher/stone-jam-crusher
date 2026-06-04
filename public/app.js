@@ -14,7 +14,7 @@ const UP = {
 };
 const SAVE_KEY = "stone-crusher-3d.v2";
 const BELT_SPEED = 1.5;          // m/s — heavy stones carried steadily toward the crusher
-const MAX_ROCKS = 46;
+const MAX_ROCKS = 24;
 const ROCK_COLORS = [0x6f6a62, 0x5b554c, 0x4a443d, 0x7c766c, 0x534d45, 0x615a51];
 
 // ---------------------------------------------------------------- state
@@ -34,7 +34,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.92;
+renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -55,7 +55,7 @@ controls.maxDistance = 18;
 controls.minPolarAngle = 0.2;
 controls.maxPolarAngle = 1.45;
 
-scene.add(new THREE.HemisphereLight(0xd9c9a6, 0x5a4530, 1.0));
+scene.add(new THREE.HemisphereLight(0xe5d8bd, 0x6a5638, 1.25));
 const sun = new THREE.DirectionalLight(0xfff1d6, 1.35);
 sun.position.set(6, 11, 5); sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
@@ -75,9 +75,15 @@ ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground)
 
 // shared rock geometries/materials (cheap mesh reuse)
 function rockGeo() {
-  const g = new THREE.IcosahedronGeometry(1, 0);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) { const f = 0.58 + Math.random() * 0.6; p.setXYZ(i, p.getX(i) * f, p.getY(i) * f, p.getZ(i) * f); }
+  const g = new THREE.IcosahedronGeometry(1, 1);          // detail 1 -> rounder, chunky boulder
+  const p = g.attributes.position, v = new THREE.Vector3(), cache = {};
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    // key by position so COINCIDENT vertices share the same displacement (no torn faces / spikes)
+    const key = v.x.toFixed(2) + "," + v.y.toFixed(2) + "," + v.z.toFixed(2);
+    let f = cache[key]; if (f === undefined) { f = 0.84 + Math.random() * 0.3; cache[key] = f; }
+    p.setXYZ(i, v.x * f, v.y * f, v.z * f);
+  }
   g.computeVertexNormals(); return g;
 }
 const ROCK_GEOS = [rockGeo(), rockGeo(), rockGeo(), rockGeo(), rockGeo()];
@@ -143,15 +149,6 @@ for (const side of [-0.82, 0.82]) {
   rb.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), BELT_ANGLE);
   world.addBody(rb);
 }
-// gentle funnel walls (static) guiding rocks from hopper rim to throat
-function wall(px, pz, ax, az, ang) {
-  const b = new CANNON.Body({ mass: 0, material: physBelt });
-  b.addShape(new CANNON.Box(new CANNON.Vec3(1.4, 0.08, 1.0)));
-  b.position.set(px, 3.35, pz);
-  b.quaternion.setFromAxisAngle(new CANNON.Vec3(ax, 0, az), ang);
-  world.addBody(b);
-}
-wall(1.15, 0, 0, 1, 0.7); wall(-1.15, 0, 0, 1, -0.7); wall(0, 1.15, 1, 0, -0.7); wall(0, -1.15, 1, 0, 0.7);
 
 // ---------------------------------------------------------------- rocks + fragments
 const rocks = [];
@@ -159,7 +156,7 @@ function spawnRock(t = 0) {
   // t = fraction from the top (high) end of the belt, so we can pre-fill a row
   if (rocks.length >= MAX_ROCKS) despawn(rocks[0]);
   const tier = Math.min(8, Math.floor(state.crushed / 14));
-  const radius = 0.34 + Math.random() * 0.18 + tier * 0.025;
+  const radius = 0.38 + Math.random() * 0.2 + tier * 0.03;
   const sx = 0.8 + Math.random() * 0.45, sy = 0.7 + Math.random() * 0.35, sz = 0.8 + Math.random() * 0.45;
   const mesh = rockMesh(radius, sx, sy, sz); scene.add(mesh);
   // box collider so heavy stones slide/are carried rather than roll like balls
@@ -180,7 +177,7 @@ function despawn(r) {
 
 const frags = [];
 function spawnFragments(pos, radius) {
-  for (let k = 0; k < 5; k++) {
+  for (let k = 0; k < 3; k++) {
     const rr = radius * (0.32 + Math.random() * 0.3);
     const mesh = rockMesh(rr, 0.8 + Math.random() * 0.4, 0.8 + Math.random() * 0.4, 0.8 + Math.random() * 0.4); scene.add(mesh);
     const body = new CANNON.Body({ mass: rr * rr * rr * 70, material: physRock, angularDamping: 0.4 });
@@ -189,7 +186,7 @@ function spawnFragments(pos, radius) {
     const a = Math.random() * Math.PI * 2;
     body.velocity.set(Math.cos(a) * (0.8 + Math.random() * 1.6), 0.4 + Math.random() * 1.4, Math.sin(a) * (0.8 + Math.random() * 1.6));
     world.addBody(body);
-    frags.push({ mesh, body, life: 2.6 });
+    frags.push({ mesh, body, life: 1.3 });
   }
 }
 function despawnFrag(f) { const i = frags.indexOf(f); if (i < 0) return; frags.splice(i, 1); scene.remove(f.mesh); world.removeBody(f.body); }
@@ -254,11 +251,11 @@ function animate() {
       // belt friction DRIVES the stone toward belt speed via a force, so real
       // weight stays: stones lag, push each other, pile up, then tip off the end
       const b = r.body, m = b.mass;
-      b.applyForce(new CANNON.Vec3((-cosB * BELT_SPEED - b.velocity.x) * m * 4, 0, -b.velocity.z * m * 4));
+      b.applyForce(new CANNON.Vec3((-cosB * BELT_SPEED - b.velocity.x) * m * 3, 0, -b.velocity.z * m * 3));
       b.angularVelocity.x *= 0.6; b.angularVelocity.y *= 0.6; b.angularVelocity.z *= 0.6;
     }
-    if (p.x > -0.75 && p.x < 0.75 && p.z > -0.75 && p.z < 0.75 && p.y < 3.25 && p.y > 2.1) { crushRock(r); continue; }
-    if (p.y < -3 || r.age > 18) despawn(r);
+    if (p.x > -1.0 && p.x < 1.0 && p.z > -1.0 && p.z < 1.0 && p.y < 3.3 && p.y > 1.9) { crushRock(r); continue; }
+    if (p.y < 1.8 || r.age > 7) despawn(r);   // missed the crusher -> clear fast, no ground litter
     else { r.mesh.position.copy(p); r.mesh.quaternion.copy(r.body.quaternion); }
   }
   for (let i = frags.length - 1; i >= 0; i--) {
