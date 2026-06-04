@@ -15,7 +15,7 @@ const UP = {
 };
 const SAVE_KEY = "stone-crusher-3d.v2";
 const BELT_SPEED = 1.7;
-const MAX_ROCKS = 22;
+const MAX_ROCKS = 26;
 const ROCK_COLORS = [0x6f6a62, 0x5b554c, 0x4a443d, 0x7c766c, 0x534d45, 0x615a51];
 
 // ---------------------------------------------------------------- state
@@ -114,6 +114,7 @@ const hHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8), n
 const hHead = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.36, 0.36), matSteel); hHead.position.set(0, -1.5, 0); hHead.castShadow = true; hammer.add(hHead);
 let hammerT = 1;
 hammer.rotation.z = -1.0;
+hammer.visible = false;   // only shown while striking a tapped stone
 
 // workers (hired) — simple figures that swing when auto-hammering
 const workerMatBody = new THREE.MeshStandardMaterial({ color: 0x9a6b3c, roughness: 1 });
@@ -155,16 +156,16 @@ for (const side of [-0.82, 0.82]) { const rb = new CANNON.Body({ mass: 0, materi
 
 // holding bin at the crusher mouth (rocks rest here to be hammered)
 function staticBox(px, py, pz, hx, hy, hz) { const b = new CANNON.Body({ mass: 0, material: physBelt }); b.addShape(new CANNON.Box(new CANNON.Vec3(hx, hy, hz))); b.position.set(px, py, pz); world.addBody(b); }
-staticBox(0, 2.3, 0, 0.8, 0.12, 0.8);        // floor
-staticBox(-0.85, 2.85, 0, 0.08, 0.6, 0.9);   // back (-X)
-staticBox(0, 2.85, 0.85, 0.9, 0.6, 0.08);    // +Z
-staticBox(0, 2.85, -0.85, 0.9, 0.6, 0.08);   // -Z
-staticBox(0.85, 2.7, 0, 0.08, 0.4, 0.9);     // feed side (+X, lower so stones roll in)
+staticBox(0, 2.3, 0, 0.85, 0.12, 0.85);       // floor
+staticBox(-0.9, 3.05, 0, 0.08, 0.95, 0.95);   // back (-X)
+staticBox(0, 3.05, 0.9, 0.95, 0.95, 0.08);    // +Z
+staticBox(0, 3.05, -0.9, 0.95, 0.95, 0.08);   // -Z
+staticBox(0.9, 2.8, 0, 0.08, 0.5, 0.95);      // feed side (+X, lower so stones drop in)
 
 // ---------------------------------------------------------------- rocks
 const rocks = [];
 function spawnRock(t = 0) {
-  if (rocks.length >= MAX_ROCKS) despawn(rocks[0]);
+  if (rocks.length >= MAX_ROCKS) return;   // pause feeding when backed up (never delete a flowing stone)
   const tier = Math.min(8, Math.floor(state.crushed / 14));
   const radius = 0.38 + Math.random() * 0.2 + tier * 0.03;
   const sx = 0.8 + Math.random() * 0.45, sy = 0.7 + Math.random() * 0.35, sz = 0.8 + Math.random() * 0.45;
@@ -199,19 +200,26 @@ for (let i = 0; i < 30; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry
 function puff(pos, n) { let c = 0; for (const d of dust) { if (d.life > 0) continue; d.m.position.set(pos.x, pos.y, pos.z); d.m.scale.setScalar(0.1 + Math.random() * 0.13); d.vel.set((Math.random() - 0.5) * 2.4, Math.random() * 2.2, (Math.random() - 0.5) * 2.4); d.life = d.max = 0.45 + Math.random() * 0.4; d.m.material.opacity = 0.55; d.m.visible = true; if (++c >= n) break; } }
 
 // ---------------------------------------------------------------- hammer + breaking
-let jawPulse = 0;
-function findTarget() {
+const raycaster = new THREE.Raycaster();
+function findTarget() {   // top stone resting in the bin (for the workers)
   let best = null, by = -Infinity;
-  for (const r of rocks) { const p = r.body.position; if (p.x > -0.95 && p.x < 0.95 && p.z > -0.95 && p.z < 0.95 && p.y > 2.0 && p.y < 3.6 && p.y > by) { by = p.y; best = r; } }
+  for (const r of rocks) { const p = r.body.position; if (p.x > -0.95 && p.x < 0.95 && p.z > -0.95 && p.z < 0.95 && p.y > 2.0 && p.y < 3.8 && p.y > by) { by = p.y; best = r; } }
   return best;
 }
-function hammerStrike() {
-  hammerT = 0; for (const w of workers) w.userData.swing = 0;
-  const r = findTarget(); if (!r) return;
+function strikeRock(r) {
   r.body.wakeUp();
   r.body.applyImpulse(new CANNON.Vec3((Math.random() - 0.5) * 0.6, -r.body.mass * 2.4, (Math.random() - 0.5) * 0.6));
-  r.hp -= 1; puff(r.body.position, 5); jawPulse = 0.18;
+  r.hp -= 1; puff(r.body.position, 5);
   if (r.hp <= 0) breakRock(r);
+}
+function manualHammer(r) {   // hammer appears at the tapped stone and swings down on it
+  const p = r.body.position; hammer.position.set(p.x, p.y + 1.4, p.z); hammer.visible = true; hammerT = 0;
+  strikeRock(r);
+}
+function autoHammer() {      // hired workers smash stones in the bin
+  const r = findTarget(); if (!r) return;
+  for (const w of workers) w.userData.swing = 0;
+  strikeRock(r);
 }
 function breakRock(r) { state.money += gainPerCrush(); state.crushed += 1; spawnFragments(r.body.position, r.radius); puff(r.body.position, 9); despawn(r); setHUD(); }
 
@@ -220,7 +228,11 @@ let downPos = null, downTime = 0;
 canvas.addEventListener("pointerdown", (e) => { downPos = { x: e.clientX, y: e.clientY }; downTime = performance.now(); });
 canvas.addEventListener("pointerup", (e) => {
   if (!downPos) return; const moved = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y); downPos = null;
-  if (moved < 9 && performance.now() - downTime < 450) hammerStrike();
+  if (moved >= 9 || performance.now() - downTime >= 450) return;
+  const rect = canvas.getBoundingClientRect();
+  raycaster.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
+  const hit = raycaster.intersectObjects(rocks.map((r) => r.mesh), false)[0];
+  if (hit) { const r = rocks.find((x) => x.mesh === hit.object); if (r) manualHammer(r); }
 });
 
 // ---------------------------------------------------------------- UI
@@ -246,25 +258,23 @@ function animate() {
   beltTex.offset.x += dt * 0.9;   // belt runs toward the crusher
 
   feedTimer += dt; if (feedTimer >= 1 / feedRate) { feedTimer = 0; spawnRock(); }
-  if (autoHammerRate > 0) { hammerTimer += dt; const iv = 1 / autoHammerRate; while (hammerTimer >= iv) { hammerTimer -= iv; hammerStrike(); } }
+  if (autoHammerRate > 0) { hammerTimer += dt; const iv = 1 / autoHammerRate; while (hammerTimer >= iv) { hammerTimer -= iv; autoHammer(); } }
 
   for (let i = rocks.length - 1; i >= 0; i--) {
-    const r = rocks[i], p = r.body.position; r.age += dt;
-    if (p.x > 0.55 && p.x < 4.7 && p.y > 2.95 && p.y < 5.5 && Math.abs(p.z) < 1.0) {
-      const b = r.body, m = b.mass;
+    const r = rocks[i], p = r.body.position;
+    if (p.x > 0.95 && p.x < 4.7 && p.y > 2.95 && p.y < 5.5 && Math.abs(p.z) < 1.0) {
+      const b = r.body, m = b.mass;                       // belt drives stones toward the crusher
       b.applyForce(new CANNON.Vec3((-cosB * BELT_SPEED - b.velocity.x) * m * 6, 0, -b.velocity.z * m * 6));
       b.angularVelocity.x *= 0.6; b.angularVelocity.y *= 0.6; b.angularVelocity.z *= 0.6;
     }
-    const inBin = p.x > -0.95 && p.x < 0.95 && p.z > -0.95 && p.z < 0.95 && p.y > 2.0 && p.y < 3.6;
-    if (!inBin && (p.y < 1.5 || r.age > 7)) { despawn(r); continue; }
+    if (p.y < 1.0) { despawn(r); continue; }              // only stones that fell off the world (never silently vanish)
     r.mesh.position.copy(p); r.mesh.quaternion.copy(r.body.quaternion);
   }
   for (let i = frags.length - 1; i >= 0; i--) { const f = frags[i]; f.life -= dt; if (f.life <= 0 || f.body.position.y < -2) { despawnFrag(f); continue; } f.mesh.position.copy(f.body.position); f.mesh.quaternion.copy(f.body.quaternion); }
 
   // hammer + workers swing
-  if (hammerT < 1) { hammerT = Math.min(1, hammerT + dt * 5); hammer.rotation.z = -1.0 + Math.sin(hammerT * Math.PI) * 1.3; } else hammer.rotation.z = -1.0;
+  if (hammerT < 1) { hammerT = Math.min(1, hammerT + dt * 5); hammer.rotation.z = -1.0 + Math.sin(hammerT * Math.PI) * 1.3; if (hammerT >= 1) hammer.visible = false; }
   for (const w of workers) { const s = w.userData; if (s.swing < 1) { s.swing = Math.min(1, s.swing + dt * 5); w.userData.arm.rotation.x = -1.2 + Math.sin(s.swing * Math.PI) * 1.4; } else w.userData.arm.rotation.x = -1.2; }
-  jawPulse = Math.max(0, jawPulse - dt);
   for (const d of dust) { if (d.life <= 0) continue; d.life -= dt; d.m.position.addScaledVector(d.vel, dt); d.vel.y -= dt * 1.5; d.m.scale.addScalar(dt * 1.7); d.m.material.opacity = Math.max(0, (d.life / d.max) * 0.55); if (d.life <= 0) d.m.visible = false; }
 
   controls.update(); renderer.render(scene, camera);
