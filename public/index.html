@@ -22,16 +22,21 @@
 
       <header id="hud">
         <div class="money"><span class="coin">¥</span><strong id="money">0</strong></div>
-        <div class="rates">砕いた <span id="crushed">0</span> ・ 投入 <span id="feedrate">1.0</span>/秒</div>
+        <div class="rates">砕いた <span id="crushed">0</span> ・ 投入 <span id="feedrate">1.0</span>/秒 ・ 作業員 <span id="workers">0</span></div>
       </header>
 
-      <div id="hint">ドラッグで回転 ・ 石をタップで砕く</div>
+      <div id="hint">ドラッグで回転 ・ タップでハンマー</div>
 
       <section id="shop">
         <button class="item" data-id="feed">
           <span class="ic">🚚</span>
           <span class="info"><b>投入速度 <em id="feed-own">x0</em></b><small>石が速く流れてくる</small></span>
           <span class="cost">¥<i id="feed-cost">15</i></span>
+        </button>
+        <button class="item" data-id="worker">
+          <span class="ic">👷</span>
+          <span class="info"><b>作業員 <em id="worker-own">x0</em></b><small>自動で石を叩く</small></span>
+          <span class="cost">¥<i id="worker-cost">60</i></span>
         </button>
         <button class="item" data-id="value">
           <span class="ic">💎</span>
@@ -66,7 +71,7 @@
         true
       );
       try {
-        await import("./app.js?v=3d-7");
+        await import("./app.js?v=3d-8");
       } catch (e) {
         show((e && (e.stack || e.message)) || String(e));
       }
