@@ -9,22 +9,22 @@ import * as CANNON from "cannon-es";
 // ---------------------------------------------------------------- config
 const UP = {
   feed:   { base: 15,  mul: 1.18 },
+  belt:   { base: 40,  mul: 1.22 },
   worker: { base: 60,  mul: 1.25 },
   value:  { base: 25,  mul: 1.16 },
   boss:   { base: 500, mul: 1.6 },
 };
 const SAVE_KEY = "stone-crusher-3d.v2";
-const BELT_SPEED = 1.7;
 const MAX_ROCKS = 26;
 const GRIND_RATE = 1.5;          // hp/sec the crusher itself grinds off each stone in its mouth
 const ROCK_COLORS = [0x6f6a62, 0x5b554c, 0x4a443d, 0x7c766c, 0x534d45, 0x615a51];
 
 // ---------------------------------------------------------------- state
-let state = { money: 0, crushed: 0, counts: { feed: 0, worker: 0, value: 0, boss: 0 }, lastTime: Date.now() };
-let mult = 1, feedRate = 0.7, autoHammerRate = 0;
-function load() { try { const r = localStorage.getItem(SAVE_KEY); if (r) { const d = JSON.parse(r); state = Object.assign(state, d); state.counts = Object.assign({ feed: 0, worker: 0, value: 0, boss: 0 }, d.counts || {}); } } catch (e) {} }
+let state = { money: 0, crushed: 0, counts: { feed: 0, belt: 0, worker: 0, value: 0, boss: 0 }, lastTime: Date.now() };
+let mult = 1, feedRate = 0.7, autoHammerRate = 0, beltSpeed = 1.6;
+function load() { try { const r = localStorage.getItem(SAVE_KEY); if (r) { const d = JSON.parse(r); state = Object.assign(state, d); state.counts = Object.assign({ feed: 0, belt: 0, worker: 0, value: 0, boss: 0 }, d.counts || {}); } } catch (e) {} }
 function save() { try { state.lastTime = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {} }
-function recompute() { mult = Math.pow(1.15, state.counts.boss); feedRate = 0.7 + 0.3 * state.counts.feed; autoHammerRate = state.counts.worker * 1.3; }
+function recompute() { mult = Math.pow(1.15, state.counts.boss); feedRate = 0.7 + 0.3 * state.counts.feed; beltSpeed = 1.6 + 0.5 * state.counts.belt; autoHammerRate = state.counts.worker * 1.3; }
 function gainPerCrush() { return Math.max(1, Math.round((1 + state.counts.value) * mult)); }
 function fmt(n) { n = Math.floor(n); if (n < 1000) return String(n); const u = ["", "K", "M", "B", "T", "Qa"]; let i = 0, v = n; while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; } return (v >= 100 ? v.toFixed(0) : v.toFixed(2)) + u[i]; }
 
@@ -106,7 +106,8 @@ const BELT_ANGLE = 0.34, BELT_C = new THREE.Vector3(2.5, 4.15, 0), BELT_HALF = 1
 const cosB = Math.cos(BELT_ANGLE), sinB = Math.sin(BELT_ANGLE);
 const belt = new THREE.Mesh(new THREE.BoxGeometry(BELT_HALF * 2, 0.18, 1.5), matBeltTop);
 belt.position.copy(BELT_C); belt.rotation.z = BELT_ANGLE; belt.castShadow = belt.receiveShadow = true; scene.add(belt);
-for (const side of [-0.78, 0.78]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(BELT_HALF * 2, 0.16, 0.1), matSteelDark); rail.position.set(BELT_C.x, BELT_C.y + 0.13, side); rail.rotation.z = BELT_ANGLE; scene.add(rail); }
+for (const side of [-0.8, 0.8]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(BELT_HALF * 2, 0.34, 0.09), matSteelDark); rail.position.set(BELT_C.x, BELT_C.y + 0.22, side); rail.rotation.z = BELT_ANGLE; rail.castShadow = true; scene.add(rail); }
+for (const side of [-0.92, 0.92]) { const gd = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.55, 0.08), matSteelDark); gd.position.set(1.4, 3.2, side); gd.castShadow = true; scene.add(gd); }  // guide rails belt -> bin
 for (const e of [-1, 1]) { const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.5, 16), matSteelDark); roller.rotation.x = Math.PI / 2; roller.position.set(BELT_C.x + e * BELT_HALF * cosB, BELT_C.y + e * BELT_HALF * sinB, 0); scene.add(roller); }
 
 // hammer (swings down onto the bin on each strike)
@@ -141,8 +142,9 @@ function ensureWorkers() {
 }
 
 // ---------------------------------------------------------------- physics
-const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -22, 0) });
+const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -18, 0) });
 world.broadphase = new CANNON.SAPBroadphase(world); world.allowSleep = true;
+world.solver.iterations = 14;   // stable stacking -> no popcorn jitter
 const physGround = new CANNON.Material("g"), physRock = new CANNON.Material("r"), physBelt = new CANNON.Material("b");
 world.addContactMaterial(new CANNON.ContactMaterial(physRock, physGround, { friction: 0.7, restitution: 0 }));
 world.addContactMaterial(new CANNON.ContactMaterial(physRock, physRock, { friction: 0.6, restitution: 0 }));
@@ -153,7 +155,7 @@ groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2); 
 
 const beltBody = new CANNON.Body({ mass: 0, material: physBelt }); beltBody.addShape(new CANNON.Box(new CANNON.Vec3(BELT_HALF, 0.09, 0.75)));
 beltBody.position.set(BELT_C.x, BELT_C.y, 0); beltBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), BELT_ANGLE); world.addBody(beltBody);
-for (const side of [-0.82, 0.82]) { const rb = new CANNON.Body({ mass: 0, material: physBelt }); rb.addShape(new CANNON.Box(new CANNON.Vec3(BELT_HALF, 0.2, 0.06))); rb.position.set(BELT_C.x, BELT_C.y + 0.16, side); rb.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), BELT_ANGLE); world.addBody(rb); }
+for (const side of [-0.82, 0.82]) { const rb = new CANNON.Body({ mass: 0, material: physBelt }); rb.addShape(new CANNON.Box(new CANNON.Vec3(BELT_HALF, 0.34, 0.06))); rb.position.set(BELT_C.x, BELT_C.y + 0.26, side); rb.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), BELT_ANGLE); world.addBody(rb); }
 
 // holding bin at the crusher mouth (rocks rest here to be hammered)
 function staticBox(px, py, pz, hx, hy, hz) { const b = new CANNON.Body({ mass: 0, material: physBelt }); b.addShape(new CANNON.Box(new CANNON.Vec3(hx, hy, hz))); b.position.set(px, py, pz); world.addBody(b); }
@@ -161,7 +163,9 @@ staticBox(0, 2.3, 0, 0.85, 0.12, 0.85);       // floor
 staticBox(-0.9, 3.05, 0, 0.08, 0.95, 0.95);   // back (-X)
 staticBox(0, 3.05, 0.9, 0.95, 0.95, 0.08);    // +Z
 staticBox(0, 3.05, -0.9, 0.95, 0.95, 0.08);   // -Z
-staticBox(0.9, 2.8, 0, 0.08, 0.5, 0.95);      // feed side (+X, lower so stones drop in)
+staticBox(0.95, 2.95, 0, 0.08, 0.5, 0.95);    // feed side (+X)
+staticBox(1.4, 3.2, 0.92, 0.6, 0.55, 0.08);   // guide rail belt -> bin (+Z)
+staticBox(1.4, 3.2, -0.92, 0.6, 0.55, 0.08);  // guide rail belt -> bin (-Z)
 
 // ---------------------------------------------------------------- rocks
 const rocks = [];
@@ -171,12 +175,12 @@ function spawnRock(t = 0) {
   const radius = 0.28 + Math.random() * 0.12 + Math.min(tier, 5) * 0.012;   // small enough to flow + fit the bin
   const sx = 0.8 + Math.random() * 0.45, sy = 0.7 + Math.random() * 0.35, sz = 0.8 + Math.random() * 0.45;
   const mesh = rockMesh(radius, sx, sy, sz); scene.add(mesh);
-  const body = new CANNON.Body({ mass: radius * radius * radius * 70, material: physRock, linearDamping: 0.1, angularDamping: 0.55, allowSleep: false });
+  const body = new CANNON.Body({ mass: radius * radius * radius * 70, material: physRock, linearDamping: 0.2, angularDamping: 0.85, allowSleep: false });
   body.addShape(new CANNON.Box(new CANNON.Vec3(radius * sx * 0.82, radius * sy * 0.82, radius * sz * 0.82)));
   const cx = BELT_C.x + cosB * BELT_HALF * (1 - 2 * t), cy = BELT_C.y + sinB * BELT_HALF * (1 - 2 * t);
-  body.position.set(cx - sinB * (radius + 0.16), cy + cosB * (radius + 0.16), (Math.random() - 0.5) * 0.7);
+  body.position.set(cx - sinB * (radius + 0.12), cy + cosB * (radius + 0.12), (Math.random() - 0.5) * 0.5);
   body.quaternion.setFromEuler(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
-  body.velocity.set(-cosB * BELT_SPEED, -sinB * BELT_SPEED, 0);
+  body.velocity.set(-cosB * beltSpeed, -sinB * beltSpeed, 0);
   world.addBody(body);
   rocks.push({ mesh, body, radius, grind: 0, hp: 2 + Math.min(3, Math.floor(tier / 3)) });
 }
@@ -209,7 +213,7 @@ function findTarget() {   // top stone resting in the bin (for the workers)
 }
 function strikeRock(r) {
   r.body.wakeUp();
-  r.body.applyImpulse(new CANNON.Vec3((Math.random() - 0.5) * 0.6, -r.body.mass * 2.4, (Math.random() - 0.5) * 0.6));
+  r.body.applyImpulse(new CANNON.Vec3((Math.random() - 0.5) * 0.4, -r.body.mass * 1.6, (Math.random() - 0.5) * 0.4));
   r.hp -= 1; puff(r.body.position, 5);
   if (r.hp <= 0) breakRock(r);
 }
@@ -244,7 +248,7 @@ document.querySelectorAll(".item").forEach((el) => el.addEventListener("click", 
 function setHUD() {
   $("money").textContent = fmt(state.money); $("crushed").textContent = fmt(state.crushed);
   $("feedrate").textContent = feedRate.toFixed(1); $("workers").textContent = state.counts.worker;
-  for (const id of ["feed", "worker", "value", "boss"]) {
+  for (const id of ["feed", "belt", "worker", "value", "boss"]) {
     $(id + "-own").textContent = "x" + state.counts[id]; $(id + "-cost").textContent = fmt(cost(id));
     const el = document.querySelector('.item[data-id="' + id + '"]'); if (el) el.classList.toggle("afford", state.money >= cost(id));
   }
@@ -256,7 +260,7 @@ let feedTimer = 0, hammerTimer = 0, saveTimer = 0;
 function animate() {
   const dt = Math.min(0.05, clock.getDelta());
   world.step(1 / 60, dt, 4);
-  beltTex.offset.x += dt * 0.9;   // belt runs toward the crusher
+  beltTex.offset.x += dt * (0.3 + beltSpeed * 0.4);   // belt runs toward the crusher (scales with speed)
 
   feedTimer += dt; if (feedTimer >= 1 / feedRate) { feedTimer = 0; spawnRock(); }
   if (autoHammerRate > 0) { hammerTimer += dt; const iv = 1 / autoHammerRate; while (hammerTimer >= iv) { hammerTimer -= iv; autoHammer(); } }
@@ -265,8 +269,8 @@ function animate() {
     const r = rocks[i], p = r.body.position;
     if (p.x > 0.95 && p.x < 4.7 && p.y > 2.95 && p.y < 5.5 && Math.abs(p.z) < 1.0) {
       const b = r.body, m = b.mass;                       // belt drives stones toward the crusher
-      b.applyForce(new CANNON.Vec3((-cosB * BELT_SPEED - b.velocity.x) * m * 6, 0, -b.velocity.z * m * 6));
-      b.angularVelocity.x *= 0.6; b.angularVelocity.y *= 0.6; b.angularVelocity.z *= 0.6;
+      b.applyForce(new CANNON.Vec3((-cosB * beltSpeed - b.velocity.x) * m * 3, 0, -b.velocity.z * m * 3));
+      b.angularVelocity.x *= 0.7; b.angularVelocity.y *= 0.7; b.angularVelocity.z *= 0.7;
     } else if (p.x > -0.95 && p.x < 0.95 && p.z > -0.95 && p.z < 0.95 && p.y > 1.9 && p.y < 3.5) {
       r.grind += dt * GRIND_RATE;                          // the crusher itself grinds stones in its mouth
       if (r.grind >= 1) { r.grind -= 1; r.hp -= 1; puff(p, 3); if (r.hp <= 0) { breakRock(r); continue; } }

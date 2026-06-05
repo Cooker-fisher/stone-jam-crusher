@@ -30,8 +30,13 @@
       <section id="shop">
         <button class="item" data-id="feed">
           <span class="ic">🚚</span>
-          <span class="info"><b>投入速度 <em id="feed-own">x0</em></b><small>石が速く流れてくる</small></span>
+          <span class="info"><b>投入量 <em id="feed-own">x0</em></b><small>石が多く流れてくる</small></span>
           <span class="cost">¥<i id="feed-cost">15</i></span>
+        </button>
+        <button class="item" data-id="belt">
+          <span class="ic">⏩</span>
+          <span class="info"><b>ベルト速度 <em id="belt-own">x0</em></b><small>コンベヤが速くなる</small></span>
+          <span class="cost">¥<i id="belt-cost">40</i></span>
         </button>
         <button class="item" data-id="worker">
           <span class="ic">👷</span>
@@ -71,7 +76,7 @@
         true
       );
       try {
-        await import("./app.js?v=3d-11");
+        await import("./app.js?v=3d-12");
       } catch (e) {
         show((e && (e.stack || e.message)) || String(e));
       }
