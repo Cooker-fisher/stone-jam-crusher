@@ -96,10 +96,12 @@ function rockMesh(radius, sx, sy, sz) {
 const machine = new THREE.Group(); scene.add(machine);
 const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.6, 3.2), matSteelDark); baseMesh.position.y = 0.3; baseMesh.castShadow = baseMesh.receiveShadow = true; machine.add(baseMesh);
 const body = new THREE.Mesh(new THREE.BoxGeometry(2.9, 2.0, 2.6), matSteel); body.position.y = 1.4; body.castShadow = body.receiveShadow = true; machine.add(body);
-const hopper = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 0.7, 1.6, 4, 1, true), new THREE.MeshStandardMaterial({ color: 0x7a6650, roughness: 0.6, metalness: 0.45, side: THREE.DoubleSide }));
-hopper.position.y = 3.4; hopper.rotation.y = Math.PI / 4; hopper.castShadow = true; machine.add(hopper);
-const throat = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.4, 1.0, 16, 1, true), new THREE.MeshStandardMaterial({ color: 0x140d08, roughness: 1, side: THREE.DoubleSide }));
-throat.position.y = 2.5; machine.add(throat);
+// すり鉢 (conical mortar bowl) — stones funnel to the centre and are ground at the bottom
+const SURI_TOP = 1.75, SURI_BOT = 0.42, SURI_YTOP = 3.55, SURI_YBOT = 2.2;
+const suribachi = new THREE.Mesh(new THREE.CylinderGeometry(SURI_TOP, SURI_BOT, SURI_YTOP - SURI_YBOT, 30, 1, true), new THREE.MeshStandardMaterial({ color: 0x6b6258, roughness: 1, metalness: 0.08, side: THREE.DoubleSide }));
+suribachi.position.y = (SURI_YTOP + SURI_YBOT) / 2; suribachi.receiveShadow = true; machine.add(suribachi);
+for (let k = 1; k <= 4; k++) { const f = k / 5; const ring = new THREE.Mesh(new THREE.TorusGeometry(SURI_BOT + f * (SURI_TOP - SURI_BOT), 0.03, 6, 30), matSteelDark); ring.position.y = SURI_YBOT + f * (SURI_YTOP - SURI_YBOT); ring.rotation.x = Math.PI / 2; machine.add(ring); }
+const holeDisk = new THREE.Mesh(new THREE.CircleGeometry(SURI_BOT * 0.95, 20), new THREE.MeshStandardMaterial({ color: 0x0c0805 })); holeDisk.rotation.x = -Math.PI / 2; holeDisk.position.y = SURI_YBOT + 0.03; machine.add(holeDisk);
 
 // conveyor (visual)
 const BELT_ANGLE = 0.34, BELT_C = new THREE.Vector3(2.5, 4.15, 0), BELT_HALF = 1.85;
@@ -161,13 +163,24 @@ for (const side of [-0.82, 0.82]) { const rb = new CANNON.Body({ mass: 0, materi
 
 // holding bin at the crusher mouth (rocks rest here to be hammered)
 function staticBox(px, py, pz, hx, hy, hz) { const b = new CANNON.Body({ mass: 0, material: physBelt }); b.addShape(new CANNON.Box(new CANNON.Vec3(hx, hy, hz))); b.position.set(px, py, pz); world.addBody(b); }
-staticBox(0, 2.3, 0, 0.9, 0.12, 0.9);         // floor
-staticBox(-0.95, 3.45, 0, 0.08, 1.3, 1.0);    // back (-X) tall
-staticBox(0, 3.45, 0.95, 1.0, 1.3, 0.08);     // +Z tall
-staticBox(0, 3.45, -0.95, 1.0, 1.3, 0.08);    // -Z tall
-staticBox(0.95, 2.9, 0, 0.08, 0.45, 1.0);     // feed side (+X, low so the belt can deliver over it)
-staticBox(1.5, 3.2, 0.95, 0.7, 0.55, 0.08);   // guide rail belt -> bin (+Z)
-staticBox(1.5, 3.2, -0.95, 0.7, 0.55, 0.08);  // guide rail belt -> bin (-Z)
+// すり鉢 physics: a ring of angled walls forming the bowl + a floor at the centre
+for (let i = 0; i < 16; i++) {
+  const phi = (i + 0.5) / 16 * Math.PI * 2, cphi = Math.cos(phi), sphi = Math.sin(phi);
+  const topP = new THREE.Vector3(cphi * SURI_TOP, SURI_YTOP, sphi * SURI_TOP);
+  const botP = new THREE.Vector3(cphi * SURI_BOT, SURI_YBOT, sphi * SURI_BOT);
+  const center = topP.clone().add(botP).multiplyScalar(0.5);
+  const yAxis = topP.clone().sub(botP).normalize();
+  const zAxis = new THREE.Vector3().crossVectors(new THREE.Vector3(-sphi, 0, cphi), yAxis).normalize();
+  const xAxis = new THREE.Vector3().crossVectors(yAxis, zAxis).normalize();
+  const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis));
+  const chord = 2 * Math.tan(Math.PI / 16) * ((SURI_TOP + SURI_BOT) / 2) * 1.4;
+  const b = new CANNON.Body({ mass: 0, material: physBelt });
+  b.addShape(new CANNON.Box(new CANNON.Vec3(chord / 2, topP.distanceTo(botP) / 2, 0.07)));
+  b.position.set(center.x, center.y, center.z);
+  b.quaternion.set(q.x, q.y, q.z, q.w);
+  world.addBody(b);
+}
+staticBox(0, SURI_YBOT - 0.08, 0, SURI_BOT + 0.18, 0.12, SURI_BOT + 0.18);   // bowl floor (centre)
 
 // ---------------------------------------------------------------- rocks
 const rocks = [];
@@ -178,7 +191,7 @@ function spawnRock(t = 0) {
   const sx = 0.8 + Math.random() * 0.45, sy = 0.7 + Math.random() * 0.35, sz = 0.8 + Math.random() * 0.45;
   const mesh = rockMesh(radius, sx, sy, sz); scene.add(mesh);
   const body = new CANNON.Body({ mass: radius * radius * radius * 70, material: physRock, linearDamping: 0.3, angularDamping: 0.9, allowSleep: false });
-  body.addShape(new CANNON.Box(new CANNON.Vec3(radius * sx * 0.82, radius * sy * 0.82, radius * sz * 0.82)));
+  body.addShape(new CANNON.Sphere(radius));   // spheres roll down the すり鉢 to the centre
   const cx = BELT_C.x + cosB * BELT_HALF * (1 - 2 * t), cy = BELT_C.y + sinB * BELT_HALF * (1 - 2 * t);
   body.position.set(cx - sinB * (radius + 0.12), cy + cosB * (radius + 0.12), (Math.random() - 0.5) * 0.5);
   body.quaternion.setFromEuler(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
@@ -208,11 +221,11 @@ function puff(pos, n) { let c = 0; for (const d of dust) { if (d.life > 0) conti
 
 // ---------------------------------------------------------------- hammer + breaking
 const raycaster = new THREE.Raycaster();
-function inJam(p) { return p.x < 1.8 && p.x > -1.1 && p.y > 1.9 && p.y < 4.1 && Math.abs(p.z) < 1.2; }   // belt-end + hopper pile = the jam
+function inJam(p) { return p.x * p.x + p.z * p.z < 3.4 && p.y > 1.9 && p.y < 3.7; }   // stones inside the すり鉢 bowl
 function jamCount() { let n = 0; for (const r of rocks) { if (inJam(r.body.position)) n++; } return n; }
-function findTarget() {   // the jammed stone nearest the crusher throat (workers clear the jam from the mouth out)
+function findTarget() {   // stone nearest the bowl centre/bottom (workers clear it from the middle out)
   let best = null, bd = Infinity;
-  for (const r of rocks) { const p = r.body.position; if (!inJam(p)) continue; const d = p.x * p.x + (p.y - 2.7) * (p.y - 2.7) + p.z * p.z; if (d < bd) { bd = d; best = r; } }
+  for (const r of rocks) { const p = r.body.position; if (!inJam(p)) continue; const d = p.x * p.x + (p.y - 2.3) * (p.y - 2.3) + p.z * p.z; if (d < bd) { bd = d; best = r; } }
   return best;
 }
 function strikeRock(r) {
@@ -275,8 +288,8 @@ function animate() {
       const b = r.body, m = b.mass;                       // belt gently drives stones toward the crusher (stops before the bin so they don't fly out)
       b.applyForce(new CANNON.Vec3((-cosB * beltSpeed - b.velocity.x) * m * 2.5, 0, -b.velocity.z * m * 2.5));
       b.angularVelocity.x *= 0.7; b.angularVelocity.y *= 0.7; b.angularVelocity.z *= 0.7;
-    } else if (p.x > -0.95 && p.x < 0.95 && p.z > -0.95 && p.z < 0.95 && p.y > 1.9 && p.y < 3.5) {
-      r.grind += dt * GRIND_RATE;                          // the crusher itself grinds stones in its mouth
+    } else if (p.x * p.x + p.z * p.z < 0.55 && p.y > 1.9 && p.y < 2.9) {
+      r.grind += dt * GRIND_RATE;                          // the crusher grinds stones gathered at the bowl bottom
       if (r.grind >= 1) { r.grind -= 1; r.hp -= 1; puff(p, 3); if (r.hp <= 0) { breakRock(r); continue; } }
     }
     if (p.y < 1.0 || p.x > 6 || p.x < -5 || Math.abs(p.z) > 4) { despawn(r); continue; }   // remove stones that escaped the play area
