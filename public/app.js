@@ -24,7 +24,7 @@ let state = { money: 0, crushed: 0, counts: { feed: 0, belt: 0, worker: 0, value
 let mult = 1, feedRate = 0.7, autoHammerRate = 0, beltSpeed = 1.6;
 function load() { try { const r = localStorage.getItem(SAVE_KEY); if (r) { const d = JSON.parse(r); state = Object.assign(state, d); state.counts = Object.assign({ feed: 0, belt: 0, worker: 0, value: 0, boss: 0 }, d.counts || {}); } } catch (e) {} }
 function save() { try { state.lastTime = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {} }
-function recompute() { mult = Math.pow(1.15, state.counts.boss); feedRate = 0.7 + 0.3 * state.counts.feed; beltSpeed = 1.6 + 0.5 * state.counts.belt; autoHammerRate = state.counts.worker * 1.3; }
+function recompute() { mult = Math.pow(1.15, state.counts.boss); feedRate = Math.min(5, 0.7 + 0.3 * state.counts.feed); beltSpeed = Math.min(3.5, 1.6 + 0.2 * state.counts.belt); autoHammerRate = state.counts.worker * 1.3; }
 function gainPerCrush() { return Math.max(1, Math.round((1 + state.counts.value) * mult)); }
 function fmt(n) { n = Math.floor(n); if (n < 1000) return String(n); const u = ["", "K", "M", "B", "T", "Qa"]; let i = 0, v = n; while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; } return (v >= 100 ? v.toFixed(0) : v.toFixed(2)) + u[i]; }
 
@@ -122,23 +122,25 @@ hammer.visible = false;   // only shown while striking a tapped stone
 const workerMatBody = new THREE.MeshStandardMaterial({ color: 0x9a6b3c, roughness: 1 });
 const workerMatHat = new THREE.MeshStandardMaterial({ color: 0xe0b44e, roughness: 1 });
 const workers = [];
-function makeWorker(i) {
+function makeWorker() {
   const g = new THREE.Group();
-  const ang = -0.7 + i * 0.7;
-  g.position.set(Math.cos(ang) * 2.0, 0, Math.sin(ang) * 2.0 + 0.4);
-  g.lookAt(0, 0, 0);
   const bodyM = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.5, 4, 8), workerMatBody); bodyM.position.y = 0.55; bodyM.castShadow = true; g.add(bodyM);
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), workerMatHat); head.position.y = 1.02; head.castShadow = true; g.add(head);
-  const arm = new THREE.Group(); arm.position.set(0.12, 0.85, 0.16); g.add(arm);
+  const arm = new THREE.Group(); arm.position.set(0, 0.85, 0.18); g.add(arm);
   const mallet = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6, 6), new THREE.MeshStandardMaterial({ color: 0x5a3f25, roughness: 0.9 })); mallet.position.set(0, -0.3, 0); arm.add(mallet);
-  const malletHead = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.14), matSteel); malletHead.position.set(0, -0.6, 0); arm.add(malletHead);
+  const malletHead = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.15, 0.15), matSteel); malletHead.position.set(0, -0.6, 0); arm.add(malletHead);
   arm.rotation.x = -1.2; g.userData.arm = arm; g.userData.swing = 1;
   scene.add(g); return g;
 }
-function ensureWorkers() {
-  const want = Math.min(state.counts.worker, 5);
-  while (workers.length < want) workers.push(makeWorker(workers.length));
+function ensureWorkers() {                 // workers stand around the hopper rim and hammer the jam
+  const want = Math.min(state.counts.worker, 6);
+  while (workers.length < want) workers.push(makeWorker());
   while (workers.length > want) scene.remove(workers.pop());
+  for (let i = 0; i < workers.length; i++) {
+    const ang = (i / Math.max(1, workers.length)) * Math.PI * 2 + 0.4;
+    workers[i].position.set(Math.cos(ang) * 1.25, 2.45, Math.sin(ang) * 1.25);
+    workers[i].lookAt(0, 2.9, 0);
+  }
 }
 
 // ---------------------------------------------------------------- physics
@@ -193,8 +195,8 @@ function spawnFragments(pos, radius) {
     const mesh = rockMesh(rr, 0.8 + Math.random() * 0.4, 0.8 + Math.random() * 0.4, 0.8 + Math.random() * 0.4); scene.add(mesh);
     const body = new CANNON.Body({ mass: rr * rr * rr * 70, material: physRock, angularDamping: 0.4 }); body.addShape(new CANNON.Sphere(rr));
     body.position.set(pos.x + (Math.random() - 0.5) * 0.3, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 0.3);
-    const a = Math.random() * Math.PI * 2; body.velocity.set(Math.cos(a) * (0.8 + Math.random() * 1.6), 0.6 + Math.random() * 1.6, Math.sin(a) * (0.8 + Math.random() * 1.6));
-    world.addBody(body); frags.push({ mesh, body, life: 1.3 });
+    const a = Math.random() * Math.PI * 2; body.velocity.set(Math.cos(a) * (0.4 + Math.random() * 0.9), 0.3 + Math.random() * 0.8, Math.sin(a) * (0.4 + Math.random() * 0.9));
+    world.addBody(body); frags.push({ mesh, body, life: 1.1 });
   }
 }
 function despawnFrag(f) { const i = frags.indexOf(f); if (i < 0) return; frags.splice(i, 1); scene.remove(f.mesh); world.removeBody(f.body); }
@@ -206,9 +208,11 @@ function puff(pos, n) { let c = 0; for (const d of dust) { if (d.life > 0) conti
 
 // ---------------------------------------------------------------- hammer + breaking
 const raycaster = new THREE.Raycaster();
-function findTarget() {   // top stone resting in the bin (for the workers)
-  let best = null, by = -Infinity;
-  for (const r of rocks) { const p = r.body.position; if (p.x > -0.95 && p.x < 0.95 && p.z > -0.95 && p.z < 0.95 && p.y > 2.0 && p.y < 3.8 && p.y > by) { by = p.y; best = r; } }
+function inJam(p) { return p.x < 1.8 && p.x > -1.1 && p.y > 1.9 && p.y < 4.1 && Math.abs(p.z) < 1.2; }   // belt-end + hopper pile = the jam
+function jamCount() { let n = 0; for (const r of rocks) { if (inJam(r.body.position)) n++; } return n; }
+function findTarget() {   // the jammed stone nearest the crusher throat (workers clear the jam from the mouth out)
+  let best = null, bd = Infinity;
+  for (const r of rocks) { const p = r.body.position; if (!inJam(p)) continue; const d = p.x * p.x + (p.y - 2.7) * (p.y - 2.7) + p.z * p.z; if (d < bd) { bd = d; best = r; } }
   return best;
 }
 function strikeRock(r) {
@@ -262,7 +266,7 @@ function animate() {
   world.step(1 / 60, dt, 4);
   beltTex.offset.x += dt * (0.3 + beltSpeed * 0.4);   // belt runs toward the crusher (scales with speed)
 
-  feedTimer += dt; if (feedTimer >= 1 / feedRate) { feedTimer = 0; spawnRock(); }
+  feedTimer += dt; if (feedTimer >= 1 / feedRate) { feedTimer = 0; if (jamCount() < 11) spawnRock(); }   // backpressure: stop feeding a full jam (prevents belt overflow/spill)
   if (autoHammerRate > 0) { hammerTimer += dt; const iv = 1 / autoHammerRate; while (hammerTimer >= iv) { hammerTimer -= iv; autoHammer(); } }
 
   for (let i = rocks.length - 1; i >= 0; i--) {
