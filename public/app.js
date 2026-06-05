@@ -16,6 +16,7 @@ const UP = {
 const SAVE_KEY = "stone-crusher-3d.v2";
 const BELT_SPEED = 1.7;
 const MAX_ROCKS = 26;
+const GRIND_RATE = 1.5;          // hp/sec the crusher itself grinds off each stone in its mouth
 const ROCK_COLORS = [0x6f6a62, 0x5b554c, 0x4a443d, 0x7c766c, 0x534d45, 0x615a51];
 
 // ---------------------------------------------------------------- state
@@ -23,7 +24,7 @@ let state = { money: 0, crushed: 0, counts: { feed: 0, worker: 0, value: 0, boss
 let mult = 1, feedRate = 0.7, autoHammerRate = 0;
 function load() { try { const r = localStorage.getItem(SAVE_KEY); if (r) { const d = JSON.parse(r); state = Object.assign(state, d); state.counts = Object.assign({ feed: 0, worker: 0, value: 0, boss: 0 }, d.counts || {}); } } catch (e) {} }
 function save() { try { state.lastTime = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {} }
-function recompute() { mult = Math.pow(1.15, state.counts.boss); feedRate = 0.7 + 0.3 * state.counts.feed; autoHammerRate = state.counts.worker * 0.9; }
+function recompute() { mult = Math.pow(1.15, state.counts.boss); feedRate = 0.7 + 0.3 * state.counts.feed; autoHammerRate = state.counts.worker * 1.3; }
 function gainPerCrush() { return Math.max(1, Math.round((1 + state.counts.value) * mult)); }
 function fmt(n) { n = Math.floor(n); if (n < 1000) return String(n); const u = ["", "K", "M", "B", "T", "Qa"]; let i = 0, v = n; while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; } return (v >= 100 ? v.toFixed(0) : v.toFixed(2)) + u[i]; }
 
@@ -167,7 +168,7 @@ const rocks = [];
 function spawnRock(t = 0) {
   if (rocks.length >= MAX_ROCKS) return;   // pause feeding when backed up (never delete a flowing stone)
   const tier = Math.min(8, Math.floor(state.crushed / 14));
-  const radius = 0.38 + Math.random() * 0.2 + tier * 0.03;
+  const radius = 0.28 + Math.random() * 0.12 + Math.min(tier, 5) * 0.012;   // small enough to flow + fit the bin
   const sx = 0.8 + Math.random() * 0.45, sy = 0.7 + Math.random() * 0.35, sz = 0.8 + Math.random() * 0.45;
   const mesh = rockMesh(radius, sx, sy, sz); scene.add(mesh);
   const body = new CANNON.Body({ mass: radius * radius * radius * 70, material: physRock, linearDamping: 0.1, angularDamping: 0.55, allowSleep: false });
@@ -177,7 +178,7 @@ function spawnRock(t = 0) {
   body.quaternion.setFromEuler(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
   body.velocity.set(-cosB * BELT_SPEED, -sinB * BELT_SPEED, 0);
   world.addBody(body);
-  rocks.push({ mesh, body, radius, age: 0, hp: Math.max(2, Math.round(radius * 5 + tier)) });
+  rocks.push({ mesh, body, radius, grind: 0, hp: 2 + Math.min(3, Math.floor(tier / 3)) });
 }
 function despawn(r) { const i = rocks.indexOf(r); if (i < 0) return; rocks.splice(i, 1); scene.remove(r.mesh); world.removeBody(r.body); }
 
@@ -266,6 +267,9 @@ function animate() {
       const b = r.body, m = b.mass;                       // belt drives stones toward the crusher
       b.applyForce(new CANNON.Vec3((-cosB * BELT_SPEED - b.velocity.x) * m * 6, 0, -b.velocity.z * m * 6));
       b.angularVelocity.x *= 0.6; b.angularVelocity.y *= 0.6; b.angularVelocity.z *= 0.6;
+    } else if (p.x > -0.95 && p.x < 0.95 && p.z > -0.95 && p.z < 0.95 && p.y > 1.9 && p.y < 3.5) {
+      r.grind += dt * GRIND_RATE;                          // the crusher itself grinds stones in its mouth
+      if (r.grind >= 1) { r.grind -= 1; r.hp -= 1; puff(p, 3); if (r.hp <= 0) { breakRock(r); continue; } }
     }
     if (p.y < 1.0) { despawn(r); continue; }              // only stones that fell off the world (never silently vanish)
     r.mesh.position.copy(p); r.mesh.quaternion.copy(r.body.quaternion);
