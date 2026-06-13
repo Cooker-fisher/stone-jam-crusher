@@ -3,84 +3,36 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#1d160e" />
-    <title>Stone Crusher 3D / 石くだき工場</title>
+    <meta name="theme-color" content="#15120d" />
+    <title>STONE JAM CRUSHER｜石くだき工場</title>
     <link rel="stylesheet" href="./style.css" />
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "./vendor/three.module.js",
-          "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js",
-          "cannon-es": "./vendor/cannon-es.js"
-        }
-      }
-    </script>
   </head>
   <body>
-    <div id="app">
-      <canvas id="scene"></canvas>
+    <div id="wrap">
+      <canvas id="game" width="900" height="1000"></canvas>
 
-      <header id="hud">
-        <div class="money"><span class="coin">¥</span><strong id="money">0</strong></div>
-        <div class="rates">砕いた <span id="crushed">0</span> ・ 投入 <span id="feedrate">1.0</span>/秒 ・ 作業員 <span id="workers">0</span></div>
-      </header>
+      <div id="ui">
+        <header id="hud">
+          <div class="hazard"></div>
+          <div class="row">
+            <div class="money"><span class="coin">¥</span><strong id="money">0</strong></div>
+            <div class="stat">解消 <b id="cleared">0</b></div>
+          </div>
+        </header>
 
-      <div id="hint">ドラッグで回転 ・ 赤い石をタップでハンマー</div>
-      <div id="status" class="hidden"></div>
+        <div id="status" class="hidden"></div>
 
-      <section id="shop">
-        <button class="item" data-id="feed">
-          <span class="ic">🚚</span>
-          <span class="info"><b>投入量 <em id="feed-own">x0</em></b><small>石が多く流れてくる</small></span>
-          <span class="cost">¥<i id="feed-cost">15</i></span>
-        </button>
-        <button class="item" data-id="belt">
-          <span class="ic">⏩</span>
-          <span class="info"><b>ベルト速度 <em id="belt-own">x0</em></b><small>コンベヤが速くなる</small></span>
-          <span class="cost">¥<i id="belt-cost">40</i></span>
-        </button>
-        <button class="item" data-id="worker">
-          <span class="ic">👷</span>
-          <span class="info"><b>作業員 <em id="worker-own">x0</em></b><small>自動で石を叩く</small></span>
-          <span class="cost">¥<i id="worker-cost">60</i></span>
-        </button>
-        <button class="item" data-id="value">
-          <span class="ic">💎</span>
-          <span class="info"><b>破砕の価値 <em id="value-own">x0</em></b><small>石1個の¥ +1</small></span>
-          <span class="cost">¥<i id="value-cost">25</i></span>
-        </button>
-        <button class="item" data-id="boss">
-          <span class="ic">🧑‍🏭</span>
-          <span class="info"><b>親方 <em id="boss-own">x0</em></b><small>全産出 ×1.15</small></span>
-          <span class="cost">¥<i id="boss-cost">500</i></span>
-        </button>
-      </section>
+        <footer id="tools">
+          <button class="tool active" data-mode="hammer">🔨 ハンマー</button>
+          <button class="tool" data-mode="chain">⛓ チェーン</button>
+          <div class="hint" id="hint">詰まった岩をタップで砕け</div>
+        </footer>
+      </div>
 
-      <div id="loading">3D読み込み中…</div>
+      <div id="loading">読み込み中…</div>
     </div>
 
-    <script type="module">
-      const show = (m) => {
-        const l = document.getElementById("loading");
-        if (!l) return;
-        l.classList.remove("hidden");
-        l.style.cssText =
-          "position:fixed;inset:0;margin:0;padding:24px;white-space:pre-wrap;word-break:break-word;font:12px/1.5 monospace;color:#ffd9a0;background:#1d160e;z-index:50;overflow:auto;text-align:left";
-        l.textContent = "⚠ 読み込みエラー（この文面をそのまま貼ってください）\n\n" + m;
-      };
-      window.addEventListener(
-        "error",
-        (e) => {
-          if (e && e.target && (e.target.src || e.target.href))
-            show("リソース読込失敗: " + (e.target.src || e.target.href));
-        },
-        true
-      );
-      try {
-        await import("./app.js?v=3d-20");
-      } catch (e) {
-        show((e && (e.stack || e.message)) || String(e));
-      }
-    </script>
+    <script src="./vendor/matter.min.js"></script>
+    <script src="./app.js?v=1"></script>
   </body>
 </html>
