@@ -38,8 +38,8 @@ function wallBar(x1, y1, x2, y2, thick) {
 const statics = [
   wallBar(TOP_L.x, TOP_L.y, THR_L.x, THR_L.y, 46),   // left hopper wall (fan)
   wallBar(TOP_R.x, TOP_R.y, THR_R.x, THR_R.y, 46),   // right hopper wall (fan)
-  wallBar(THR_L.x, THR_L.y + 6, 405, BELT_Y, 24),    // left discharge wall (near-vertical slot)
-  wallBar(THR_R.x, THR_R.y + 6, 495, BELT_Y, 24),    // right discharge wall (near-vertical slot)
+  wallBar(THR_L.x, THR_L.y + 6, 372, BELT_Y, 24),    // left discharge wall (funnels OUT to the belt)
+  wallBar(THR_R.x, THR_R.y + 6, 528, BELT_Y, 24),    // right discharge wall (funnels OUT to the belt)
   Bodies.rectangle(W / 2, BELT_Y + 34, W, 40, { isStatic: true, friction: 0.4 }),  // belt surface
   Bodies.rectangle(-20, H / 2, 40, H, { isStatic: true }),    // left bound
   Bodies.rectangle(W + 20, H / 2, 40, H, { isStatic: true }), // right bound
@@ -60,14 +60,14 @@ function makeRock(x, y, size, boss) {
   catch (e) { b = null; }
   if (!b) b = Bodies.polygon(x, y, 8, size, { friction: 1.0, frictionStatic: 2.2, restitution: 0.0, density: boss ? 0.12 : 0.022 });
   b.slop = 0.02;
-  b.gameType = "rock"; b.boss = !!boss; b.hp = boss ? 6 : 2 + (Math.random() * 2 | 0);
+  b.gameType = "rock"; b.boss = !!boss; b.hp = boss ? 6 + (cleared / 4 | 0) : 2 + (Math.random() * 2 | 0) + (cleared / 9 | 0);
   b.tone = boss ? 0.82 : 0.9 + Math.random() * 0.18; b.warm = boss ? 0.5 : Math.random() * 0.35;
   b.seed = Math.random() * 99; b.size = size;
   rocks.push(b); World.add(world, b); return b;
 }
 function makeFrag(x, y, size) {
-  if (frags.length > 70) removeBody(frags[0], frags);
-  const b = Bodies.polygon(x, y, 5 + (Math.random() * 3 | 0), size, { friction: 0.6, restitution: 0.05, density: 0.0015, angle: Math.random() * 6 });
+  if (frags.length > 80) removeBody(frags[0], frags);
+  const b = Bodies.polygon(x, y, 5 + (Math.random() * 3 | 0), size, { friction: 0.2, restitution: 0.1, density: 0.0012, frictionAir: 0.004, angle: Math.random() * 6, collisionFilter: { group: -1 } });
   b.gameType = "frag"; b.tone = 0.85 + Math.random() * 0.2; b.warm = Math.random() * 0.3; b.seed = Math.random() * 99;
   Body.setVelocity(b, { x: (Math.random() - 0.5) * 4, y: -Math.random() * 3 });
   frags.push(b); World.add(world, b); return b;
@@ -77,9 +77,14 @@ function removeBody(b, arr) { const i = arr.indexOf(b); if (i >= 0) arr.splice(i
 // ---------------------------------------------------------------- state + vfx
 let money = 0, cleared = 0, jammed = false, jamTimer = 0, clearMsg = 0, keystone = null;
 let shake = 0, micro = 1.1, mode = "hammer";
-const dust = [], sparks = [];
-try { const s = JSON.parse(localStorage.getItem("sjc") || "{}"); money = s.money || 0; cleared = s.cleared || 0; } catch (e) {}
-function save() { try { localStorage.setItem("sjc", JSON.stringify({ money, cleared })); } catch (e) {} }
+let hammerLv = 1, workers = 0, jawLv = 1, workerTimer = 0;
+const dust = [], sparks = [], rings = [];
+const UP = { hammer: { base: 30, mul: 1.2 }, worker: { base: 90, mul: 1.28 }, jaw: { base: 60, mul: 1.22 } };
+try { const s = JSON.parse(localStorage.getItem("sjc") || "{}"); money = s.money || 0; cleared = s.cleared || 0; hammerLv = s.hammerLv || 1; workers = s.workers || 0; jawLv = s.jawLv || 1; } catch (e) {}
+function save() { try { localStorage.setItem("sjc", JSON.stringify({ money, cleared, hammerLv, workers, jawLv })); } catch (e) {} }
+function ring(x, y) { rings.push({ x, y, r: 6, life: 1 }); if (rings.length > 30) rings.shift(); }
+function upCost(k) { const lv = k === "hammer" ? hammerLv - 1 : k === "jaw" ? jawLv - 1 : workers; return Math.floor(UP[k].base * Math.pow(UP[k].mul, lv)); }
+function buy(k) { const c = upCost(k); if (money < c) return; money -= c; if (k === "hammer") hammerLv++; else if (k === "jaw") jawLv++; else workers++; setShop(); setHUD(); save(); }
 
 function puff(x, y, n, big) {
   for (let i = 0; i < n; i++) dust.push({ x, y, vx: (Math.random() - 0.5) * (big ? 4 : 2.4), vy: -Math.random() * (big ? 3.2 : 1.8) - 0.3, r: (big ? 22 : 12) + Math.random() * 18, life: 1, decay: 0.012 + Math.random() * 0.02, o: 0.5 });
@@ -151,7 +156,7 @@ function hammerAt(x, y) {
   if (!hit) { puff(x, y, 3); spark(x, y, 2); return; }
   const dir = (x < hit.position.x ? -1 : 1);
   Body.applyForce(hit, { x, y }, { x: dir * hit.mass * 0.05, y: hit.mass * 0.12 });
-  hit.hp -= 2; puff(hit.position.x, hit.position.y, 9, true); spark(x, y, 7); shake = Math.max(shake, 10); playThud(1);
+  hit.hp -= (1 + hammerLv); puff(hit.position.x, hit.position.y, 9, true); spark(x, y, 7); ring(x, y); shake = Math.max(shake, 10); playThud(1);
   for (const r of rocks) { if (r === hit) continue; const dx = r.position.x - x, dy = r.position.y - y, d = Math.hypot(dx, dy) || 1; if (d < 130) { Body.applyForce(r, r.position, { x: dx / d * r.mass * 0.02, y: -r.mass * 0.008 }); puff(r.position.x, r.position.y, 1); } }   // crack propagation through the pile
   if (hit.hp <= 0) shatter(hit);
 }
@@ -177,14 +182,19 @@ const statusEl = $("status");
 function setStatus(cls, text) {
   if (!statusEl) return;
   if (!cls) { statusEl.className = "hidden"; return; }
-  statusEl.className = cls; statusEl.textContent = text || "⚠ HOPPER JAMMED — 赤い岩を砕け";
+  statusEl.className = cls; statusEl.textContent = text || "⚠ 詰まり！赤い岩を砕け";
 }
-function setHUD() { if ($("money")) $("money").textContent = fmt(money); if ($("cleared")) $("cleared").textContent = cleared; }
+function setShop() {
+  const lvl = { hammer: "Lv" + hammerLv, jaw: "Lv" + jawLv, worker: String(workers) };
+  for (const k of ["hammer", "worker", "jaw"]) { const a = $(k + "-lv"), b = $(k + "-cost"), el = document.querySelector('.up[data-up="' + k + '"]'); if (a) a.textContent = lvl[k]; if (b) b.textContent = "¥" + fmt(upCost(k)); if (el) el.classList.toggle("afford", money >= upCost(k)); }
+}
+function setHUD() { if ($("money")) $("money").textContent = fmt(money); if ($("cleared")) $("cleared").textContent = cleared; setShop(); }
 function fmt(n) { n = Math.floor(n); if (n < 1000) return String(n); const u = ["", "K", "M", "B"]; let i = 0, v = n; while (v >= 1000 && i < 3) { v /= 1000; i++; } return v.toFixed(2) + u[i]; }
 document.querySelectorAll(".tool").forEach((el) => el.addEventListener("click", () => {
   mode = el.dataset.mode; document.querySelectorAll(".tool").forEach((t) => t.classList.toggle("active", t === el));
   if ($("hint")) $("hint").textContent = mode === "hammer" ? "詰まった岩をタップで砕け" : "大岩をドラッグでチェーン牽引";
 }));
+document.querySelectorAll(".up").forEach((el) => el.addEventListener("click", () => buy(el.dataset.up)));
 
 // ---------------------------------------------------------------- input
 function toWorld(e) { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) }; }
@@ -259,6 +269,8 @@ function render() {
   // sparks
   for (const s of sparks) { ctx.globalAlpha = Math.max(0, s.life); ctx.strokeStyle = C.spark; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x - s.vx * 1.5, s.y - s.vy * 1.5); ctx.stroke(); }
   ctx.globalAlpha = 1;
+  for (const r of rings) { ctx.globalAlpha = Math.max(0, r.life) * 0.7; ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 7); ctx.stroke(); }
+  ctx.globalAlpha = 1;
   // dust (over everything)
   for (const d of dust) { const a = Math.max(0, d.life) * d.o; if (a <= 0) continue; const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r); g.addColorStop(0, `rgba(${C.dust},${a})`); g.addColorStop(1, `rgba(${C.dust},0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 7); ctx.fill(); }
   ctx.restore();
@@ -282,19 +294,23 @@ function frame(now) {
   const dt = last ? Math.min(0.05, (now - last) / 1000) : 0; last = now;
   Engine.update(engine, 1000 / 60);
   // feed
-  feedTimer += dt;
-  if (feedTimer > 0.7 && rocks.length < 24 && !(jammed && throatRocks().length > 9)) { feedTimer = 0; makeRock(330 + Math.random() * 240, 60, (Math.random() < 0.14 ? 70 + Math.random() * 28 : 34 + Math.random() * 22), Math.random() < 0.14); }
+  feedTimer += dt; const fi = Math.max(0.45, 0.78 - cleared * 0.008), bossP = Math.min(0.28, 0.12 + cleared * 0.006);
+  if (feedTimer > fi && rocks.length < 26 && !(jammed && throatRocks().length > 9)) { feedTimer = 0; const boss = Math.random() < bossP; makeRock(330 + Math.random() * 240, 60, boss ? 70 + Math.random() * 28 : 34 + Math.random() * 22, boss); }
   updateJam(dt); chainStep(dt);
   // jaw bite: the reciprocating jaw grinds the rock in the throat (keystone) and snaps it
-  jawPhase += dt * 7; jawBiteTimer += dt;
-  if (jawBiteTimer > 0.7) { jawBiteTimer = 0; const k = keystone; if (k && k.position.y > 560 && rocks.indexOf(k) >= 0) { k.hp -= 1; puff(k.position.x, THR_L.y, 5); spark(THR_L.x + 26, THR_L.y, 2); shake = Math.max(shake, 4.5); playThud(0.45); if (k.hp <= 0) shatter(k); } }
+  jawPhase += dt * (6 + jawLv); jawBiteTimer += dt;
+  const biteIv = 0.75 / (1 + (jawLv - 1) * 0.35);
+  if (jawBiteTimer > biteIv) { jawBiteTimer = 0; const k = keystone; if (k && k.position.y > 560 && rocks.indexOf(k) >= 0) { k.hp -= 1; puff(k.position.x, THR_L.y, 5); spark(THR_L.x + 26, THR_L.y, 2); shake = Math.max(shake, 4.5); playThud(0.4); if (k.hp <= 0) shatter(k); } }
+  // hired workers auto-hammer the keystone
+  if (workers > 0) { workerTimer += dt; const wIv = 1.3 / workers; let g = 0; while (workerTimer >= wIv && g++ < 6) { workerTimer -= wIv; const k = keystone; if (k && rocks.indexOf(k) >= 0) { k.hp -= 1; puff(k.position.x, k.position.y, 3); spark(k.position.x, k.position.y, 2); shake = Math.max(shake, 3); playThud(0.3); if (k.hp <= 0) shatter(k); } else break; } } else workerTimer = 0;
   // any rock forced past the throat shatters in the jaw
   for (let i = rocks.length - 1; i >= 0; i--) { const r = rocks[i]; if (r.position.y > CRUSH_Y) shatter(r); else if (r.position.y > H + 80) removeBody(r, rocks); }
   // belt carries fragments out; cull
-  for (let i = frags.length - 1; i >= 0; i--) { const f = frags[i]; if (f.position.y > BELT_Y - 20 && f.position.y < BELT_Y + 30) Body.setVelocity(f, { x: BELT_SPEED, y: f.velocity.y }); if (f.position.x > W + 60 || f.position.y > H + 60) removeBody(f, frags); }
+  for (let i = frags.length - 1; i >= 0; i--) { const f = frags[i]; if (f.position.y > 772) Body.setVelocity(f, { x: BELT_SPEED, y: Math.max(f.velocity.y, 1.5) }); if (f.position.x > W + 50 || f.position.y > H + 40) removeBody(f, frags); }
   // vfx
   for (let i = dust.length - 1; i >= 0; i--) { const d = dust[i]; d.x += d.vx; d.y += d.vy; d.vy += 0.04; d.vx *= 0.98; d.r += 0.6; d.life -= d.decay; if (d.life <= 0) dust.splice(i, 1); }
   for (let i = sparks.length - 1; i >= 0; i--) { const s = sparks[i]; s.x += s.vx; s.y += s.vy; s.vy += 0.5; s.life -= s.decay; if (s.life <= 0) sparks.splice(i, 1); }
+  for (let i = rings.length - 1; i >= 0; i--) { const r = rings[i]; r.r += 9; r.life -= 0.07; if (r.life <= 0) rings.splice(i, 1); }
   shake *= 0.86; if (shake < 0.2) shake = 0;
   render(); setHUD();
   saveT += dt; if (saveT > 5) { saveT = 0; save(); }

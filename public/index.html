@@ -22,17 +22,24 @@
 
         <div id="status" class="hidden"></div>
 
-        <footer id="tools">
-          <button class="tool active" data-mode="hammer">🔨 ハンマー</button>
-          <button class="tool" data-mode="chain">⛓ チェーン</button>
-          <div class="hint" id="hint">詰まった岩をタップで砕け</div>
-        </footer>
+        <div id="bottom">
+          <section id="shop">
+            <button class="up" data-up="hammer">🔨 <em id="hammer-lv">Lv1</em> <i id="hammer-cost">¥30</i></button>
+            <button class="up" data-up="worker">👷 <em id="worker-lv">0</em> <i id="worker-cost">¥90</i></button>
+            <button class="up" data-up="jaw">⚙️ <em id="jaw-lv">Lv1</em> <i id="jaw-cost">¥60</i></button>
+          </section>
+          <footer id="tools">
+            <button class="tool active" data-mode="hammer">🔨 ハンマー</button>
+            <button class="tool" data-mode="chain">⛓ チェーン</button>
+            <div class="hint" id="hint">詰まった岩をタップで砕け</div>
+          </footer>
+        </div>
       </div>
 
       <div id="loading">読み込み中…</div>
     </div>
 
     <script src="./vendor/matter.min.js"></script>
-    <script src="./app.js?v=2"></script>
+    <script src="./app.js?v=3"></script>
   </body>
 </html>
