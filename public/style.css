@@ -69,6 +69,17 @@ html, body {
 .item .info small { color: var(--muted); font-size: 0.66rem; }
 .item .cost { flex: 0 0 auto; color: var(--gold); font-weight: 800; font-size: 0.8rem; }
 
+#status {
+  position: fixed; left: 50%; top: 17%; transform: translateX(-50%);
+  padding: 9px 22px; border-radius: 12px; font-size: 1.25rem; font-weight: 800;
+  letter-spacing: 0.03em; pointer-events: none; z-index: 8; white-space: nowrap;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+}
+#status.hidden { display: none; }
+#status.jam { background: rgba(120,20,12,0.45); color: #ff7150; border: 2px solid #ff7150; animation: jamPulse 0.7s ease-in-out infinite; }
+#status.clear { background: rgba(30,90,30,0.45); color: #9fe06a; border: 2px solid #9fe06a; }
+@keyframes jamPulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+
 #loading {
   position: fixed; inset: 0; display: grid; place-items: center;
   background: #1d160e; color: var(--muted); font-weight: 700; z-index: 20;

@@ -16,7 +16,7 @@ const UP = {
 };
 const SAVE_KEY = "stone-crusher-3d.v3";
 const MAX_ROCKS = 26;
-const GRIND_RATE = 0.6;          // slow auto-grind -> stones actually JAM; you/workers hammer them clear
+const GRIND_RATE = 0.4;          // slow auto-grind -> feed outpaces it so stones JAM; you/workers hammer them clear
 const ROCK_COLORS = [0x6e665c, 0x7a5a48, 0x5b554c, 0x86614a, 0x4a443d, 0x6b5a4a];
 
 // ---------------------------------------------------------------- state
@@ -87,6 +87,7 @@ function rockGeo() {
 }
 const ROCK_GEOS = [rockGeo(), rockGeo(), rockGeo(), rockGeo(), rockGeo()];
 const ROCK_MATS = ROCK_COLORS.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true }));
+const matKeystone = new THREE.MeshStandardMaterial({ color: 0x7a3424, emissive: 0xff2e10, emissiveIntensity: 0.55, roughness: 1, flatShading: true });   // highlighted jam keystone
 function rockMesh(radius, sx, sy, sz) { const m = new THREE.Mesh(ROCK_GEOS[(Math.random() * ROCK_GEOS.length) | 0], ROCK_MATS[(Math.random() * ROCK_MATS.length) | 0]); m.scale.set(radius * sx, radius * sy, radius * sz); m.castShadow = m.receiveShadow = true; return m; }
 
 // ---------------------------------------------------------------- jaw crusher (visual)
@@ -184,7 +185,7 @@ for (const sz of [-0.82, 0.82]) staticBox(BELT_C.x, BELT_C.y + 0.24, sz, BELT_HA
 
 // ---------------------------------------------------------------- rocks
 const rocks = [];
-function spawnRock() {
+function spawnRock(atThroat) {
   if (rocks.length >= MAX_ROCKS) return;
   const tier = Math.min(8, Math.floor(state.crushed / 14));
   const radius = 0.36 + Math.random() * 0.16 + Math.min(tier, 5) * 0.012;
@@ -192,10 +193,10 @@ function spawnRock() {
   const mesh = rockMesh(radius, sx, sy, sz); scene.add(mesh);
   const body = new CANNON.Body({ mass: radius * radius * radius * 90, material: pR, linearDamping: 0.06, angularDamping: 0.4, allowSleep: false });
   body.addShape(new CANNON.Box(new CANNON.Vec3(radius * sx * 0.85, radius * sy * 0.85, radius * sz * 0.85)));   // box: carried on the belt, wedges/jams in the V
-  body.position.set(BELT_HI.x + beltAlong.x * 0.4, BELT_HI.y + 0.4, (Math.random() - 0.5) * 0.6);
-  body.velocity.set(beltAlong.x * beltSpeed, beltAlong.y * beltSpeed, 0);
+  if (atThroat) { body.position.set((Math.random() - 0.5) * 0.5, 2.5 + Math.random() * 1.0, (Math.random() - 0.5) * 0.5); body.velocity.set(0, -1, 0); }
+  else { body.position.set(BELT_HI.x + beltAlong.x * 0.4, BELT_HI.y + 0.4, (Math.random() - 0.5) * 0.6); body.velocity.set(beltAlong.x * beltSpeed, beltAlong.y * beltSpeed, 0); }
   world.addBody(body);
-  rocks.push({ mesh, body, radius, grind: 0, hp: 2 + Math.min(3, Math.floor(tier / 3)) });
+  rocks.push({ mesh, body, radius, grind: 0, hp: 2 + Math.min(3, Math.floor(tier / 3)), mat: mesh.material });
 }
 function despawn(r) { const i = rocks.indexOf(r); if (i < 0) return; rocks.splice(i, 1); scene.remove(r.mesh); world.removeBody(r.body); }
 
@@ -220,7 +221,7 @@ function puff(pos, n) { let c = 0; for (const d of dust) { if (d.life > 0) conti
 const raycaster = new THREE.Raycaster();
 function inThroat(p) { return Math.abs(p.x) < 0.65 && Math.abs(p.z) < 1.05 && p.y > 1.7 && p.y < 3.4; }   // wedged in the jaw V
 function jamCount() { let n = 0; for (const r of rocks) if (inThroat(r.body.position)) n++; return n; }
-function findTarget() { let best = null, by = -Infinity; for (const r of rocks) { const p = r.body.position; if (inThroat(p) && p.y > by) { by = p.y; best = r; } } return best; }
+function findTarget() { let best = null, by = Infinity; for (const r of rocks) { const p = r.body.position; if (inThroat(p) && p.y < by) { by = p.y; best = r; } } return best; }   // the load-bearing (lowest) stone = keystone
 function strikeRock(r) { r.body.wakeUp(); r.body.applyImpulse(new CANNON.Vec3((Math.random() - 0.5) * 0.4, -r.body.mass * 1.6, (Math.random() - 0.5) * 0.4)); r.hp -= 1; puff(r.body.position, 5); if (r.hp <= 0) breakRock(r); }
 const hammer = new THREE.Group(); hammer.position.set(0, 3.9, 0.2); scene.add(hammer);
 const hH = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8), new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.85 })); hH.position.y = -0.75; hammer.add(hH);
@@ -228,7 +229,48 @@ const hHead = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.34, 0.34), matSteel); 
 let hammerT = 1; hammer.rotation.z = -1.0; hammer.visible = false;
 function manualHammer(r) { const p = r.body.position; hammer.position.set(p.x, p.y + 1.4, p.z); hammer.visible = true; hammerT = 0; strikeRock(r); }
 function autoHammer() { const r = findTarget(); if (!r) return; for (const w of workers) w.userData.swing = 0; strikeRock(r); }
-function breakRock(r) { state.money += gainPerCrush(); state.crushed += 1; spawnFragments(r.body.position, r.radius); puff(r.body.position, 9); despawn(r); setHUD(); }
+function breakRock(r) {
+  const wasKey = (r === keystone);
+  state.money += gainPerCrush(); state.crushed += 1; spawnFragments(r.body.position, r.radius); puff(r.body.position, 9);
+  if (r === keystone) keystone = null;
+  despawn(r); setHUD();
+  if (jammed && wasKey) clearJam();   // break the keystone -> the whole jam releases
+}
+
+// ---------------- jam (arching) detection + clearing -------------------------
+let jammed = false, jamTimer = 0, keystone = null, microShake = 0.01, bigShake = 0, clearTimer = 0;
+const statusEl = document.getElementById("status");
+function setKeystone(r) {
+  if (keystone === r) return;
+  if (keystone && rocks.includes(keystone)) keystone.mesh.material = keystone.mat;
+  keystone = r; if (r) r.mesh.material = matKeystone;
+}
+function updateJam(dt) {
+  if (clearTimer > 0) { clearTimer -= dt; if (clearTimer <= 0 && statusEl) statusEl.className = "hidden"; }
+  let n = 0, spd = 0, low = null, ly = Infinity;
+  for (const r of rocks) { const p = r.body.position; if (!inThroat(p)) continue; n++; spd += r.body.velocity.length(); if (p.y < ly) { ly = p.y; low = r; } }
+  spd = n ? spd / n : 0;
+  if (!jammed) {
+    if (n >= 6 && spd < 0.55) { jamTimer += dt; if (jamTimer > 0.5) { jammed = true; jamTimer = 0; } } else jamTimer = 0;
+    if (!jammed && clearTimer <= 0) setKeystone(null);
+  }
+  if (jammed) {
+    setKeystone(low);
+    if (statusEl) { statusEl.className = "jam"; statusEl.textContent = "⚠ HOPPER JAMMED — 赤い石を叩け"; }
+    if (n < 4) clearJam();
+  }
+}
+function clearJam() {
+  const tr = []; for (const r of rocks) if (inThroat(r.body.position)) tr.push(r);
+  const bonus = Math.round((1 + state.counts.value) * mult * Math.max(2, tr.length));
+  for (const r of tr) { const p = r.body.position; if (Math.random() < 0.7) spawnFragments(p, r.radius); puff(p, 5); state.crushed += 1; despawn(r); }
+  state.money += bonus;
+  bigShake = 0.38;
+  for (let k = 0; k < 4; k++) puff({ x: (Math.random() - 0.5) * 1.4, y: 2.7, z: (Math.random() - 0.5) * 1.4 }, 11);
+  keystone = null; jammed = false; clearTimer = 1.8;
+  if (statusEl) { statusEl.className = "clear"; statusEl.textContent = "★ CLEAR!  +¥" + fmt(bonus); }
+  setHUD();
+}
 
 // ---------------------------------------------------------------- input
 let downPos = null, downTime = 0;
@@ -262,8 +304,9 @@ function animate() {
   beltTexture.offset.x += dt * (0.3 + beltSpeed * 0.4);
   for (const fw of flywheels) fw.rotation.z += dt * 3.2;
   swingJaw.position.x = swingBaseX + Math.sin(t * 6) * 0.05;     // cosmetic bite
+  updateJam(dt); bigShake = Math.max(0, bigShake - dt * 1.3);
 
-  feedTimer += dt; if (feedTimer >= 1 / feedRate) { feedTimer = 0; if (jamCount() < 10) spawnRock(); }
+  feedTimer += dt; if (feedTimer >= 1 / feedRate) { feedTimer = 0; if (jamCount() < (jammed ? 12 : 10)) spawnRock(); }
   if (autoHammerRate > 0) { hammerTimer += dt; const iv = 1 / autoHammerRate; while (hammerTimer >= iv) { hammerTimer -= iv; autoHammer(); } }
 
   for (let i = rocks.length - 1; i >= 0; i--) {
@@ -271,7 +314,7 @@ function animate() {
     // belt carries stones toward the mouth
     const onBelt = p.x < BELT_LO.x + 0.2 && p.x > BELT_HI.x - 0.3 && p.y > 5.0 && Math.abs(p.z) < 0.95;
     if (onBelt) { const b = r.body, m = b.mass; b.applyForce(new CANNON.Vec3((beltAlong.x * beltSpeed - b.velocity.x) * m * 3, (beltAlong.y * beltSpeed - b.velocity.y) * m * 1.5, -b.velocity.z * m * 3)); b.angularVelocity.set(0, 0, 0); }   // carried, not rolling
-    else if (inThroat(p)) { r.grind += dt * GRIND_RATE; if (r.grind >= 1) { r.grind -= 1; r.hp -= 1; if (Math.random() < 0.5) puff(p, 2); if (r.hp <= 0) { breakRock(r); continue; } } }
+    else if (!jammed && inThroat(p)) { r.grind += dt * GRIND_RATE; if (r.grind >= 1) { r.grind -= 1; r.hp -= 1; if (Math.random() < 0.5) puff(p, 2); if (r.hp <= 0) { breakRock(r); continue; } } }
     if (p.y < 1.0 || p.x > 6 || p.x < -6 || Math.abs(p.z) > 4) { despawn(r); continue; }
     r.mesh.position.copy(p); r.mesh.quaternion.copy(r.body.quaternion);
   }
@@ -281,7 +324,12 @@ function animate() {
   for (const w of workers) { const s = w.userData; if (s.swing < 1) { s.swing = Math.min(1, s.swing + dt * 5); w.userData.arm.rotation.x = -1.1 + Math.sin(s.swing * Math.PI) * 1.5; } else w.userData.arm.rotation.x = -1.1; }
   for (const d of dust) { if (d.life <= 0) continue; d.life -= dt; d.m.position.addScaledVector(d.vel, dt); d.vel.y -= dt * 1.5; d.m.scale.addScalar(dt * 1.7); d.m.material.opacity = Math.max(0, (d.life / d.max) * 0.5); if (d.life <= 0) d.m.visible = false; }
 
-  controls.update(); renderer.render(scene, camera);
+  controls.update();
+  const amp = microShake + bigShake;   // constant machine vibration + big shake on a jam clear
+  const ox = (Math.random() - 0.5) * amp, oy = (Math.random() - 0.5) * amp, oz = (Math.random() - 0.5) * amp;
+  camera.position.x += ox; camera.position.y += oy; camera.position.z += oz;
+  renderer.render(scene, camera);
+  camera.position.x -= ox; camera.position.y -= oy; camera.position.z -= oz;
   saveTimer += dt; if (saveTimer > 4) { saveTimer = 0; save(); }
   requestAnimationFrame(animate);
 }
@@ -291,6 +339,6 @@ function resize() { const w = window.innerWidth, h = window.innerHeight; camera.
 load(); recompute(); ensureWorkers(); resize();
 window.addEventListener("resize", resize);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") save(); });
-for (let i = 0; i < 4; i++) spawnRock();
+for (let i = 0; i < 7; i++) spawnRock(true);   // pre-fill the throat so the first jam appears immediately
 const loadingEl = document.getElementById("loading"); if (loadingEl) loadingEl.classList.add("hidden");
 setHUD(); animate();

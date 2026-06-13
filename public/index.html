@@ -25,7 +25,8 @@
         <div class="rates">砕いた <span id="crushed">0</span> ・ 投入 <span id="feedrate">1.0</span>/秒 ・ 作業員 <span id="workers">0</span></div>
       </header>
 
-      <div id="hint">ドラッグで回転 ・ タップでハンマー</div>
+      <div id="hint">ドラッグで回転 ・ 赤い石をタップでハンマー</div>
+      <div id="status" class="hidden"></div>
 
       <section id="shop">
         <button class="item" data-id="feed">
@@ -76,7 +77,7 @@
         true
       );
       try {
-        await import("./app.js?v=3d-18");
+        await import("./app.js?v=3d-19");
       } catch (e) {
         show((e && (e.stack || e.message)) || String(e));
       }
