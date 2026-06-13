@@ -16,7 +16,7 @@ const UP = {
 };
 const SAVE_KEY = "stone-crusher-3d.v3";
 const MAX_ROCKS = 26;
-const GRIND_RATE = 1.4;
+const GRIND_RATE = 0.6;          // slow auto-grind -> stones actually JAM; you/workers hammer them clear
 const ROCK_COLORS = [0x6e665c, 0x7a5a48, 0x5b554c, 0x86614a, 0x4a443d, 0x6b5a4a];
 
 // ---------------------------------------------------------------- state
@@ -99,13 +99,13 @@ for (const sx of [-1, 1]) { const lip = new THREE.Mesh(new THREE.BoxGeometry(0.2
 for (const sz of [-1, 1]) { const lip = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.5, 0.2), matSteelLt); lip.position.set(0, 3.6, sz * 1.3); lip.castShadow = true; machine.add(lip); }
 
 // toothed jaw plate (dir -1 = fixed/back-left, +1 = swing/front-right)
-const JAW_LEN = 2.2, JAW_TILT = 0.34;
+const JAW_LEN = 2.2, JAW_TILT = 0.42;
 function makeJaw(dir) {
   const g = new THREE.Group();
   const plate = new THREE.Mesh(new THREE.BoxGeometry(0.24, JAW_LEN, 2.3), matSteel); plate.castShadow = true; g.add(plate);
   for (let i = -3; i <= 3; i++) { const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 2.2), matSteelDark); tooth.position.set(dir * -0.17, i * 0.3, 0); g.add(tooth); }
-  g.rotation.z = dir * -JAW_TILT;             // top tilts outward, bottom toward centre -> V
-  g.position.set(dir * 0.52, 2.6, 0);
+  g.rotation.z = dir * -JAW_TILT;             // top tilts outward, bottom toward centre -> tight V
+  g.position.set(dir * 0.4, 2.6, 0);
   machine.add(g); return g;
 }
 const fixedJaw = makeJaw(-1);
@@ -164,8 +164,8 @@ world.addContactMaterial(new CANNON.ContactMaterial(pR, pS, { friction: 0.5, res
 const groundBody = new CANNON.Body({ mass: 0, material: pG }); groundBody.addShape(new CANNON.Plane()); groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2); world.addBody(groundBody);
 function staticBox(px, py, pz, hx, hy, hz, rotZ) { const b = new CANNON.Body({ mass: 0, material: pS }); b.addShape(new CANNON.Box(new CANNON.Vec3(hx, hy, hz))); b.position.set(px, py, pz); if (rotZ) b.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), rotZ); world.addBody(b); }
 // jaw V (both plates static; the swing plate's motion is cosmetic), side walls, base catch
-staticBox(-0.52, 2.6, 0, 0.13, JAW_LEN / 2, 1.15, JAW_TILT);   // fixed jaw
-staticBox(0.52, 2.6, 0, 0.13, JAW_LEN / 2, 1.15, -JAW_TILT);   // swing jaw (static collider)
+staticBox(-0.4, 2.6, 0, 0.13, JAW_LEN / 2, 1.15, JAW_TILT);    // fixed jaw (tight V)
+staticBox(0.4, 2.6, 0, 0.13, JAW_LEN / 2, 1.15, -JAW_TILT);    // swing jaw (static collider)
 staticBox(0, 2.7, 1.18, 1.0, 1.0, 0.09);                       // +Z wall
 staticBox(0, 2.7, -1.18, 1.0, 1.0, 0.09);                      // -Z wall
 // belt collider
@@ -177,11 +177,11 @@ const rocks = [];
 function spawnRock() {
   if (rocks.length >= MAX_ROCKS) return;
   const tier = Math.min(8, Math.floor(state.crushed / 14));
-  const radius = 0.3 + Math.random() * 0.14 + Math.min(tier, 5) * 0.012;
+  const radius = 0.36 + Math.random() * 0.16 + Math.min(tier, 5) * 0.012;
   const sx = 0.8 + Math.random() * 0.45, sy = 0.7 + Math.random() * 0.35, sz = 0.8 + Math.random() * 0.45;
   const mesh = rockMesh(radius, sx, sy, sz); scene.add(mesh);
-  const body = new CANNON.Body({ mass: radius * radius * radius * 70, material: pR, linearDamping: 0.25, angularDamping: 0.7, allowSleep: false });
-  body.addShape(new CANNON.Sphere(radius));
+  const body = new CANNON.Body({ mass: radius * radius * radius * 90, material: pR, linearDamping: 0.06, angularDamping: 0.4, allowSleep: false });
+  body.addShape(new CANNON.Box(new CANNON.Vec3(radius * sx * 0.85, radius * sy * 0.85, radius * sz * 0.85)));   // box: carried on the belt, wedges/jams in the V
   body.position.set(BELT_HI.x + beltAlong.x * 0.4, BELT_HI.y + 0.4, (Math.random() - 0.5) * 0.6);
   body.velocity.set(beltAlong.x * beltSpeed, beltAlong.y * beltSpeed, 0);
   world.addBody(body);
@@ -208,7 +208,7 @@ function puff(pos, n) { let c = 0; for (const d of dust) { if (d.life > 0) conti
 
 // ---------------------------------------------------------------- crushing
 const raycaster = new THREE.Raycaster();
-function inThroat(p) { return Math.abs(p.x) < 0.75 && Math.abs(p.z) < 1.05 && p.y > 1.7 && p.y < 3.4; }   // wedged in the jaw V
+function inThroat(p) { return Math.abs(p.x) < 0.65 && Math.abs(p.z) < 1.05 && p.y > 1.7 && p.y < 3.4; }   // wedged in the jaw V
 function jamCount() { let n = 0; for (const r of rocks) if (inThroat(r.body.position)) n++; return n; }
 function findTarget() { let best = null, by = -Infinity; for (const r of rocks) { const p = r.body.position; if (inThroat(p) && p.y > by) { by = p.y; best = r; } } return best; }
 function strikeRock(r) { r.body.wakeUp(); r.body.applyImpulse(new CANNON.Vec3((Math.random() - 0.5) * 0.4, -r.body.mass * 1.6, (Math.random() - 0.5) * 0.4)); r.hp -= 1; puff(r.body.position, 5); if (r.hp <= 0) breakRock(r); }
@@ -253,14 +253,14 @@ function animate() {
   for (const fw of flywheels) fw.rotation.z += dt * 3.2;
   swingJaw.position.x = swingBaseX + Math.sin(t * 6) * 0.05;     // cosmetic bite
 
-  feedTimer += dt; if (feedTimer >= 1 / feedRate) { feedTimer = 0; if (jamCount() < 8) spawnRock(); }
+  feedTimer += dt; if (feedTimer >= 1 / feedRate) { feedTimer = 0; if (jamCount() < 10) spawnRock(); }
   if (autoHammerRate > 0) { hammerTimer += dt; const iv = 1 / autoHammerRate; while (hammerTimer >= iv) { hammerTimer -= iv; autoHammer(); } }
 
   for (let i = rocks.length - 1; i >= 0; i--) {
     const r = rocks[i], p = r.body.position;
     // belt carries stones toward the mouth
     const onBelt = p.x < BELT_LO.x + 0.2 && p.x > BELT_HI.x - 0.3 && p.y > 3.7 && Math.abs(p.z) < 0.95;
-    if (onBelt) { const b = r.body, m = b.mass; b.applyForce(new CANNON.Vec3((beltAlong.x * beltSpeed - b.velocity.x) * m * 3, 0, -b.velocity.z * m * 3)); b.angularVelocity.x *= 0.7; b.angularVelocity.y *= 0.7; b.angularVelocity.z *= 0.7; }
+    if (onBelt) { const b = r.body, m = b.mass; b.applyForce(new CANNON.Vec3((beltAlong.x * beltSpeed - b.velocity.x) * m * 3, (beltAlong.y * beltSpeed - b.velocity.y) * m * 1.5, -b.velocity.z * m * 3)); b.angularVelocity.set(0, 0, 0); }   // carried, not rolling
     else if (inThroat(p)) { r.grind += dt * GRIND_RATE; if (r.grind >= 1) { r.grind -= 1; r.hp -= 1; if (Math.random() < 0.5) puff(p, 2); if (r.hp <= 0) { breakRock(r); continue; } } }
     if (p.y < 1.0 || p.x > 6 || p.x < -6 || Math.abs(p.z) > 4) { despawn(r); continue; }
     r.mesh.position.copy(p); r.mesh.quaternion.copy(r.body.quaternion);
