@@ -3,12 +3,13 @@
  * narrow throat; smash the keystone (or winch it with a chain) to collapse the
  * jam — dust, sparks, screen shake — and crushed gravel rides the belt out. */
 "use strict";
-const { Engine, World, Bodies, Body, Composite, Constraint, Query, Vertices } = Matter;
+const { Engine, World, Bodies, Body, Composite, Constraint, Query, Vertices, Events } = Matter;
 
 const W = 900, H = 1000;
-const TOP_L = { x: 70, y: 150 }, TOP_R = { x: 830, y: 150 };
-const THR_L = { x: 408, y: 640 }, THR_R = { x: 492, y: 640 };   // ~84px throat -> rocks arch
-const CRUSH_Y = 712, BELT_Y = 858, BELT_SPEED = 7;
+const TOP_L = { x: 120, y: 118 }, TOP_R = { x: 780, y: 118 };
+const THR_L = { x: 422, y: 664 }, THR_R = { x: 478, y: 664 };   // ~56px throat: even one big rock can't pass -> forced arching/jam
+const CRUSH_Y = 706, BELT_Y = 874, BELT_SPEED = 7;
+let jawPhase = 0, jawBiteTimer = 0;
 
 const C = {
   bgTop: "#1c1810", bgBot: "#0b0907",
@@ -37,8 +38,8 @@ function wallBar(x1, y1, x2, y2, thick) {
 const statics = [
   wallBar(TOP_L.x, TOP_L.y, THR_L.x, THR_L.y, 46),   // left hopper wall (fan)
   wallBar(TOP_R.x, TOP_R.y, THR_R.x, THR_R.y, 46),   // right hopper wall (fan)
-  wallBar(THR_L.x, THR_L.y + 6, 395, BELT_Y, 26),    // left discharge wall (near-vertical slot)
-  wallBar(THR_R.x, THR_R.y + 6, 505, BELT_Y, 26),    // right discharge wall (near-vertical slot)
+  wallBar(THR_L.x, THR_L.y + 6, 405, BELT_Y, 24),    // left discharge wall (near-vertical slot)
+  wallBar(THR_R.x, THR_R.y + 6, 495, BELT_Y, 24),    // right discharge wall (near-vertical slot)
   Bodies.rectangle(W / 2, BELT_Y + 34, W, 40, { isStatic: true, friction: 0.4 }),  // belt surface
   Bodies.rectangle(-20, H / 2, 40, H, { isStatic: true }),    // left bound
   Bodies.rectangle(W + 20, H / 2, 40, H, { isStatic: true }), // right bound
@@ -55,15 +56,17 @@ function rockVerts(size) {
 }
 function makeRock(x, y, size, boss) {
   let b;
-  try { b = Bodies.fromVertices(x, y, [rockVerts(size)], { friction: 0.95, frictionStatic: 1.4, restitution: 0.01, density: boss ? 0.0055 : 0.002 }, true); }
+  try { b = Bodies.fromVertices(x, y, [rockVerts(size)], { friction: 1.0, frictionStatic: 2.2, restitution: 0.0, density: boss ? 0.12 : 0.022 }, true); }
   catch (e) { b = null; }
-  if (!b) b = Bodies.polygon(x, y, 8, size, { friction: 0.95, frictionStatic: 1.4, restitution: 0.01, density: boss ? 0.0055 : 0.002 });
+  if (!b) b = Bodies.polygon(x, y, 8, size, { friction: 1.0, frictionStatic: 2.2, restitution: 0.0, density: boss ? 0.12 : 0.022 });
+  b.slop = 0.02;
   b.gameType = "rock"; b.boss = !!boss; b.hp = boss ? 6 : 2 + (Math.random() * 2 | 0);
   b.tone = boss ? 0.82 : 0.9 + Math.random() * 0.18; b.warm = boss ? 0.5 : Math.random() * 0.35;
   b.seed = Math.random() * 99; b.size = size;
   rocks.push(b); World.add(world, b); return b;
 }
 function makeFrag(x, y, size) {
+  if (frags.length > 70) removeBody(frags[0], frags);
   const b = Bodies.polygon(x, y, 5 + (Math.random() * 3 | 0), size, { friction: 0.6, restitution: 0.05, density: 0.0015, angle: Math.random() * 6 });
   b.gameType = "frag"; b.tone = 0.85 + Math.random() * 0.2; b.warm = Math.random() * 0.3; b.seed = Math.random() * 99;
   Body.setVelocity(b, { x: (Math.random() - 0.5) * 4, y: -Math.random() * 3 });
@@ -84,33 +87,60 @@ function puff(x, y, n, big) {
 }
 function spark(x, y, n) { for (let i = 0; i < n; i++) sparks.push({ x, y, vx: (Math.random() - 0.5) * 9, vy: -Math.random() * 7 - 1, life: 1, decay: 0.05 + Math.random() * 0.05 }); if (sparks.length > 60) sparks.splice(0, sparks.length - 60); }
 
-// ---------------------------------------------------------------- feed / jam / crush
+// audio (synthesized, no assets): low rumble loop + impact thud + crush crackle
+let actx = null;
+function ensureAudio() {
+  if (actx) return;
+  try { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; actx = new AC(); } catch (e) { return; }
+  const o = actx.createOscillator(); o.type = "sawtooth"; o.frequency.value = 42;
+  const lp = actx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 120;
+  const g = actx.createGain(); g.gain.value = 0.05;
+  o.connect(lp); lp.connect(g); g.connect(actx.destination); o.start();   // the ever-present "ゴゴゴ" rumble
+}
+function noiseBurst(dur, freq, gain) {
+  if (!actx) return; const n = Math.max(1, (actx.sampleRate * dur) | 0); const buf = actx.createBuffer(1, n, actx.sampleRate); const d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const src = actx.createBufferSource(); src.buffer = buf; const f = actx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = freq; f.Q.value = 0.7; const g = actx.createGain(); g.gain.value = gain;
+  src.connect(f); f.connect(g); g.connect(actx.destination); src.start();
+}
+function playThud(v) {
+  if (!actx) return; const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+  o.type = "sine"; o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+  g.gain.setValueAtTime(0.5 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  o.connect(g); g.connect(actx.destination); o.start(); o.stop(t + 0.22); noiseBurst(0.07, 700, 0.18 * v);
+}
+function playCrush(big) {
+  if (!actx) return; noiseBurst(big ? 0.4 : 0.25, 1400, big ? 0.4 : 0.26);
+  for (let i = 0; i < (big ? 5 : 3); i++) setTimeout(() => noiseBurst(0.06, 1800 + Math.random() * 1600, 0.14), i * 45);
+}
+
+// ---------------------------------------------------------------- feed / jam / jaw-crush
 let feedTimer = 0;
-function throatRocks() { const a = []; for (const r of rocks) { const p = r.position; if (p.x > THR_L.x - 120 && p.x < THR_R.x + 120 && p.y > 360 && p.y < CRUSH_Y) a.push(r); } return a; }
+function throatRocks() { const a = []; for (const r of rocks) { const p = r.position; if (p.x > THR_L.x - 130 && p.x < THR_R.x + 130 && p.y > 340 && p.y < CRUSH_Y) a.push(r); } return a; }
 function updateJam(dt) {
   if (clearMsg > 0) { clearMsg -= dt; if (clearMsg <= 0) setStatus(null); }
-  const tr = throatRocks();
-  let spd = 0, low = null, ly = -1;
+  const tr = throatRocks(); let spd = 0, low = null, ly = -1;
   for (const r of tr) { spd += Math.hypot(r.velocity.x, r.velocity.y); if (r.position.y > ly) { ly = r.position.y; low = r; } }
   spd = tr.length ? spd / tr.length : 99;
-  if (!jammed) { if (tr.length >= 4 && spd < 0.6) { jamTimer += dt; if (jamTimer > 0.4) jammed = true; } else jamTimer = 0; if (clearMsg <= 0) keystone = null; }
-  if (jammed) { keystone = low; setStatus("jam"); if (tr.length < 2) releaseJam(low); }
+  keystone = low;                                   // the rock in the jaw bite = what to smash
+  if (!jammed) { if (tr.length >= 5 && spd < 0.7) { jamTimer += dt; if (jamTimer > 0.45) jammed = true; } else jamTimer = 0; }
+  else { setStatus("jam"); if (tr.length < 3) clearBonus(low); }
 }
-function releaseJam(at) {
-  const tr = throatRocks(), n = tr.length || 1, totalMass = tr.reduce((s, r) => s + r.mass, 0);
-  const reward = (10 + cleared * 2) * n;
-  money += reward; cleared += 1;
-  const cx = at ? at.position.x : W / 2, cy = at ? at.position.y : THR_L.y;
-  for (let k = 0; k < 4; k++) puff(cx + (Math.random() - 0.5) * 160, cy - 40 + Math.random() * 80, 8, true);
-  spark(cx, cy, 10);
-  shake = Math.min(34, 12 + totalMass * 0.9);
-  jammed = false; keystone = null; jamTimer = 0; clearMsg = 1.8; setStatus("clear", "★ CLEAR!  +¥" + reward);
-  save();
+function clearBonus(at) {
+  const reward = 20 + cleared * 5; money += reward; cleared += 1;
+  const cx = at ? at.position.x : W / 2, cy = THR_L.y - 20;
+  for (let k = 0; k < 4; k++) puff(cx + (Math.random() - 0.5) * 170, cy + Math.random() * 70, 9, true);
+  spark(cx, cy, 12); shake = Math.min(36, shake + 18); playCrush(true);
+  jammed = false; jamTimer = 0; clearMsg = 1.7; setStatus("clear", "★ CLEAR!  +¥" + reward); save();
 }
-function crushRock(r) {
-  const p = r.position;
-  money += r.boss ? 25 : 6; puff(p.x, p.y, r.boss ? 7 : 4); spark(p.x, p.y, 3);
-  for (let k = 0; k < (r.boss ? 4 : 2); k++) makeFrag(p.x + (Math.random() - 0.5) * 20, p.y, 8 + Math.random() * 8);
+// a rock SHATTERS into many fragments (jaw bite breaks it, or a hammer kills it)
+function shatter(r) {
+  const p = { x: r.position.x, y: r.position.y }, big = r.boss, m = r.mass;
+  money += big ? 30 : 8;
+  const n = big ? 14 + (Math.random() * 6 | 0) : 8 + (Math.random() * 5 | 0);
+  for (let k = 0; k < n; k++) makeFrag(p.x + (Math.random() - 0.5) * 46, p.y + (Math.random() - 0.5) * 26, 6 + Math.random() * 7);
+  puff(p.x, p.y, big ? 14 : 9, true); spark(p.x, p.y, big ? 12 : 6);
+  shake = Math.min(36, shake + Math.min(22, 6 + m * 0.4)); playCrush(big);
   if (r === keystone) keystone = null;
   removeBody(r, rocks); save();
 }
@@ -118,17 +148,12 @@ function crushRock(r) {
 // ---------------------------------------------------------------- interaction
 function hammerAt(x, y) {
   const hit = Query.point(rocks, { x, y })[0];
-  if (!hit) { puff(x, y, 2); return; }
+  if (!hit) { puff(x, y, 3); spark(x, y, 2); return; }
   const dir = (x < hit.position.x ? -1 : 1);
-  Body.applyForce(hit, { x, y }, { x: dir * hit.mass * 0.06, y: hit.mass * 0.18 });
-  hit.hp -= 1; puff(hit.position.x, hit.position.y, 7); spark(x, y, 5); shake = Math.max(shake, 7);
-  if (hit.hp <= 0) {
-    const p = hit.position; money += hit.boss ? 18 : 5; puff(p.x, p.y, 10, true);
-    for (let k = 0; k < (hit.boss ? 5 : 3); k++) makeFrag(p.x + (Math.random() - 0.5) * 24, p.y, 9 + Math.random() * 9);
-    const wasKey = (hit === keystone); if (hit === keystone) keystone = null;
-    removeBody(hit, rocks); save();
-    if (jammed && wasKey) releaseJam(p);
-  }
+  Body.applyForce(hit, { x, y }, { x: dir * hit.mass * 0.05, y: hit.mass * 0.12 });
+  hit.hp -= 2; puff(hit.position.x, hit.position.y, 9, true); spark(x, y, 7); shake = Math.max(shake, 10); playThud(1);
+  for (const r of rocks) { if (r === hit) continue; const dx = r.position.x - x, dy = r.position.y - y, d = Math.hypot(dx, dy) || 1; if (d < 130) { Body.applyForce(r, r.position, { x: dx / d * r.mass * 0.02, y: -r.mass * 0.008 }); puff(r.position.x, r.position.y, 1); } }   // crack propagation through the pile
+  if (hit.hp <= 0) shatter(hit);
 }
 let chain = null; // { body, anchor:{x,y}, constraint, t }
 function chainStart(x, y) {
@@ -163,7 +188,7 @@ document.querySelectorAll(".tool").forEach((el) => el.addEventListener("click", 
 
 // ---------------------------------------------------------------- input
 function toWorld(e) { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) }; }
-canvas.addEventListener("pointerdown", (e) => { e.preventDefault(); const p = toWorld(e); if (mode === "hammer") hammerAt(p.x, p.y); else chainStart(p.x, p.y); });
+canvas.addEventListener("pointerdown", (e) => { e.preventDefault(); ensureAudio(); const p = toWorld(e); if (mode === "hammer") hammerAt(p.x, p.y); else chainStart(p.x, p.y); });
 canvas.addEventListener("pointermove", (e) => { if (chain) { const p = toWorld(e); chain.anchor.x = p.x; chain.constraint.pointA.x = p.x; } });
 canvas.addEventListener("pointerup", () => chainEnd());
 canvas.addEventListener("pointercancel", () => chainEnd());
@@ -220,9 +245,14 @@ function render() {
   if (chain) { ctx.strokeStyle = "#6a5236"; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(chain.anchor.x, chain.anchor.y); ctx.lineTo(chain.body.position.x, chain.body.position.y); ctx.stroke(); ctx.strokeStyle = "#3a2c1c"; ctx.lineWidth = 3; ctx.stroke(); }
   // statics
   for (const b of statics) if (b.gameType === "wall") drawWall(b);
-  // jaw teeth at the throat
+  // jaw teeth at the throat — the right plate reciprocates (the swing jaw biting)
+  const jawX = Math.sin(jawPhase) * 7;
   ctx.fillStyle = "#23190f";
-  for (let i = 0; i < 5; i++) { const yy = THR_L.y - 60 + i * 26; ctx.beginPath(); ctx.moveTo(THR_L.x - 4, yy); ctx.lineTo(THR_L.x + 22, yy + 8); ctx.lineTo(THR_L.x - 4, yy + 18); ctx.fill(); ctx.beginPath(); ctx.moveTo(THR_R.x + 4, yy); ctx.lineTo(THR_R.x - 22, yy + 8); ctx.lineTo(THR_R.x + 4, yy + 18); ctx.fill(); }
+  for (let i = 0; i < 7; i++) {
+    const yy = THR_L.y - 80 + i * 24;
+    ctx.beginPath(); ctx.moveTo(THR_L.x - 4, yy); ctx.lineTo(THR_L.x + 24, yy + 8); ctx.lineTo(THR_L.x - 4, yy + 16); ctx.fill();
+    const rx = THR_R.x - jawX; ctx.beginPath(); ctx.moveTo(rx + 4, yy); ctx.lineTo(rx - 24, yy + 8); ctx.lineTo(rx + 4, yy + 16); ctx.fill();
+  }
   // bodies
   for (const b of frags) drawFrag(b);
   for (const b of rocks) drawRock(b);
@@ -234,6 +264,18 @@ function render() {
   ctx.restore();
 }
 
+// heavy impacts kick up dust + shake (rocks slamming the walls / each other)
+Events.on(engine, "collisionStart", (ev) => {
+  for (const pr of ev.pairs) {
+    const a = pr.bodyA, b = pr.bodyB; if (a.gameType !== "rock" && b.gameType !== "rock") continue;
+    const rv = Math.hypot(a.velocity.x - b.velocity.x, a.velocity.y - b.velocity.y); if (rv < 5) continue;
+    const sp = pr.collision && pr.collision.supports && pr.collision.supports[0];
+    const px = sp ? sp.x : (a.position.x + b.position.x) / 2, py = sp ? sp.y : (a.position.y + b.position.y) / 2;
+    puff(px, py, Math.min(4, 1 + (rv / 4 | 0))); shake = Math.min(30, shake + Math.min(8, rv * 0.5));
+    if (a.gameType === "wall" || b.gameType === "wall") spark(px, py, 2);
+  }
+});
+
 // ---------------------------------------------------------------- loop
 let last = 0, saveT = 0;
 function frame(now) {
@@ -243,8 +285,11 @@ function frame(now) {
   feedTimer += dt;
   if (feedTimer > 0.7 && rocks.length < 24 && !(jammed && throatRocks().length > 9)) { feedTimer = 0; makeRock(330 + Math.random() * 240, 60, (Math.random() < 0.14 ? 70 + Math.random() * 28 : 34 + Math.random() * 22), Math.random() < 0.14); }
   updateJam(dt); chainStep(dt);
-  // crush rocks that pass the throat
-  for (let i = rocks.length - 1; i >= 0; i--) { const r = rocks[i]; if (r.position.y > CRUSH_Y) crushRock(r); else if (r.position.y > H + 80) removeBody(r, rocks); }
+  // jaw bite: the reciprocating jaw grinds the rock in the throat (keystone) and snaps it
+  jawPhase += dt * 7; jawBiteTimer += dt;
+  if (jawBiteTimer > 0.7) { jawBiteTimer = 0; const k = keystone; if (k && k.position.y > 560 && rocks.indexOf(k) >= 0) { k.hp -= 1; puff(k.position.x, THR_L.y, 5); spark(THR_L.x + 26, THR_L.y, 2); shake = Math.max(shake, 4.5); playThud(0.45); if (k.hp <= 0) shatter(k); } }
+  // any rock forced past the throat shatters in the jaw
+  for (let i = rocks.length - 1; i >= 0; i--) { const r = rocks[i]; if (r.position.y > CRUSH_Y) shatter(r); else if (r.position.y > H + 80) removeBody(r, rocks); }
   // belt carries fragments out; cull
   for (let i = frags.length - 1; i >= 0; i--) { const f = frags[i]; if (f.position.y > BELT_Y - 20 && f.position.y < BELT_Y + 30) Body.setVelocity(f, { x: BELT_SPEED, y: f.velocity.y }); if (f.position.x > W + 60 || f.position.y > H + 60) removeBody(f, frags); }
   // vfx
