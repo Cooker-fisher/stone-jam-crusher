@@ -41,9 +41,9 @@ scene.background = new THREE.Color(0xc4ad84);
 scene.fog = new THREE.Fog(0xc4ad84, 20, 48);
 
 const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 100);
-camera.position.set(4.6, 5.8, 6.2);                 // front-above, looking into the jaw throat
+camera.position.set(5.2, 6.8, 7.0);                 // front-above, looking into the funnel + jaw throat
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 2.7, 0); controls.enablePan = false; controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.target.set(0, 3.1, 0); controls.enablePan = false; controls.enableDamping = true; controls.dampingFactor = 0.08;
 controls.minDistance = 5; controls.maxDistance = 18; controls.minPolarAngle = 0.15; controls.maxPolarAngle = 1.4;
 
 scene.add(new THREE.HemisphereLight(0xe7dcc2, 0x6a5236, 1.2));
@@ -146,8 +146,12 @@ function ensureWorkers() {
   for (let i = 0; i < workers.length; i++) { const sz = i % 2 ? 1.5 : -1.5; const col = Math.floor(i / 2); workers[i].position.set(-0.8 + col * 0.8, 3.45, sz); workers[i].lookAt(0, 2.6, 0); }
 }
 
-// conveyor feeding into the mouth from the back-left
-const BELT_HI = new THREE.Vector3(-4.6, 5.3, 0), BELT_LO = new THREE.Vector3(-0.6, 4.05, 0);
+// fan-shaped feed funnel above the jaw (wide opening -> narrows into the mouth)
+const funnel = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 1.15, 1.5, 4, 1, true), new THREE.MeshStandardMaterial({ color: 0x80694f, roughness: 0.7, metalness: 0.4, side: THREE.DoubleSide }));
+funnel.position.y = 4.35; funnel.rotation.y = Math.PI / 4; funnel.castShadow = true; machine.add(funnel);
+
+// conveyor feeding into the funnel from the back-left
+const BELT_HI = new THREE.Vector3(-5.3, 6.7, 0), BELT_LO = new THREE.Vector3(-1.4, 5.35, 0);
 const BELT_C = BELT_HI.clone().add(BELT_LO).multiplyScalar(0.5);
 const beltAlong = BELT_LO.clone().sub(BELT_HI); const BELT_HALF = beltAlong.length() / 2; beltAlong.normalize();
 const beltAngle = Math.atan2(beltAlong.y, beltAlong.x);
@@ -163,11 +167,17 @@ world.addContactMaterial(new CANNON.ContactMaterial(pR, pR, { friction: 0.6, res
 world.addContactMaterial(new CANNON.ContactMaterial(pR, pS, { friction: 0.5, restitution: 0 }));
 const groundBody = new CANNON.Body({ mass: 0, material: pG }); groundBody.addShape(new CANNON.Plane()); groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2); world.addBody(groundBody);
 function staticBox(px, py, pz, hx, hy, hz, rotZ) { const b = new CANNON.Body({ mass: 0, material: pS }); b.addShape(new CANNON.Box(new CANNON.Vec3(hx, hy, hz))); b.position.set(px, py, pz); if (rotZ) b.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), rotZ); world.addBody(b); }
+function staticWall(px, py, pz, hx, hy, hz, rx, rz) { const b = new CANNON.Body({ mass: 0, material: pS }); b.addShape(new CANNON.Box(new CANNON.Vec3(hx, hy, hz))); b.position.set(px, py, pz); b.quaternion.setFromEuler(rx, 0, rz); world.addBody(b); }
 // jaw V (both plates static; the swing plate's motion is cosmetic), side walls, base catch
 staticBox(-0.4, 2.6, 0, 0.13, JAW_LEN / 2, 1.15, JAW_TILT);    // fixed jaw (tight V)
 staticBox(0.4, 2.6, 0, 0.13, JAW_LEN / 2, 1.15, -JAW_TILT);    // swing jaw (static collider)
 staticBox(0, 2.7, 1.18, 1.0, 1.0, 0.09);                       // +Z wall
 staticBox(0, 2.7, -1.18, 1.0, 1.0, 0.09);                      // -Z wall
+// feed funnel walls (fan: wide top -> narrows into the jaw)
+staticWall(-1.15, 4.35, 0, 0.1, 0.82, 1.5, 0, 0.38);
+staticWall(1.15, 4.35, 0, 0.1, 0.82, 1.5, 0, -0.38);
+staticWall(0, 4.35, 1.15, 1.5, 0.82, 0.1, -0.38, 0);
+staticWall(0, 4.35, -1.15, 1.5, 0.82, 0.1, 0.38, 0);
 // belt collider
 staticBox(BELT_C.x, BELT_C.y, 0, BELT_HALF, 0.09, 0.75, beltAngle);
 for (const sz of [-0.82, 0.82]) staticBox(BELT_C.x, BELT_C.y + 0.24, sz, BELT_HALF, 0.32, 0.06, beltAngle);
@@ -259,7 +269,7 @@ function animate() {
   for (let i = rocks.length - 1; i >= 0; i--) {
     const r = rocks[i], p = r.body.position;
     // belt carries stones toward the mouth
-    const onBelt = p.x < BELT_LO.x + 0.2 && p.x > BELT_HI.x - 0.3 && p.y > 3.7 && Math.abs(p.z) < 0.95;
+    const onBelt = p.x < BELT_LO.x + 0.2 && p.x > BELT_HI.x - 0.3 && p.y > 5.0 && Math.abs(p.z) < 0.95;
     if (onBelt) { const b = r.body, m = b.mass; b.applyForce(new CANNON.Vec3((beltAlong.x * beltSpeed - b.velocity.x) * m * 3, (beltAlong.y * beltSpeed - b.velocity.y) * m * 1.5, -b.velocity.z * m * 3)); b.angularVelocity.set(0, 0, 0); }   // carried, not rolling
     else if (inThroat(p)) { r.grind += dt * GRIND_RATE; if (r.grind >= 1) { r.grind -= 1; r.hp -= 1; if (Math.random() < 0.5) puff(p, 2); if (r.hp <= 0) { breakRock(r); continue; } } }
     if (p.y < 1.0 || p.x > 6 || p.x < -6 || Math.abs(p.z) > 4) { despawn(r); continue; }
