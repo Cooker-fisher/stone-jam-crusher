@@ -1,7 +1,7 @@
-// Stone Crusher 3D — Three.js + cannon-es physics
-// A moving conveyor carries weighty stones into the crusher's holding bin;
-// a hammer (you on tap, or hired workers automatically) strikes them with real
-// physics impulses until they break into fragments. Earn ¥, buy upgrades.
+// Stone Crusher 3D — Jaw Crusher
+// A conveyor feeds boulders into a toothed V-shaped jaw; the swing jaw bites and
+// the machine grinds the wedged stone until it breaks and falls through. Tap (or
+// hired workers) hammer stuck stones. Gritty quarry setting. Earn ¥, upgrade.
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import * as CANNON from "cannon-es";
@@ -14,17 +14,17 @@ const UP = {
   value:  { base: 25,  mul: 1.16 },
   boss:   { base: 500, mul: 1.6 },
 };
-const SAVE_KEY = "stone-crusher-3d.v2";
+const SAVE_KEY = "stone-crusher-3d.v3";
 const MAX_ROCKS = 26;
-const GRIND_RATE = 1.5;          // hp/sec the crusher itself grinds off each stone in its mouth
-const ROCK_COLORS = [0x6f6a62, 0x5b554c, 0x4a443d, 0x7c766c, 0x534d45, 0x615a51];
+const GRIND_RATE = 1.4;
+const ROCK_COLORS = [0x6e665c, 0x7a5a48, 0x5b554c, 0x86614a, 0x4a443d, 0x6b5a4a];
 
 // ---------------------------------------------------------------- state
 let state = { money: 0, crushed: 0, counts: { feed: 0, belt: 0, worker: 0, value: 0, boss: 0 }, lastTime: Date.now() };
-let mult = 1, feedRate = 0.7, autoHammerRate = 0, beltSpeed = 1.6;
+let mult = 1, feedRate = 0.7, autoHammerRate = 0, beltSpeed = 1.8;
 function load() { try { const r = localStorage.getItem(SAVE_KEY); if (r) { const d = JSON.parse(r); state = Object.assign(state, d); state.counts = Object.assign({ feed: 0, belt: 0, worker: 0, value: 0, boss: 0 }, d.counts || {}); } } catch (e) {} }
 function save() { try { state.lastTime = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {} }
-function recompute() { mult = Math.pow(1.15, state.counts.boss); feedRate = Math.min(5, 0.7 + 0.3 * state.counts.feed); beltSpeed = Math.min(2.2, 1.4 + 0.15 * state.counts.belt); autoHammerRate = state.counts.worker * 1.3; }
+function recompute() { mult = Math.pow(1.15, state.counts.boss); feedRate = Math.min(5, 0.7 + 0.3 * state.counts.feed); beltSpeed = Math.min(2.6, 1.6 + 0.16 * state.counts.belt); autoHammerRate = state.counts.worker * 1.3; }
 function gainPerCrush() { return Math.max(1, Math.round((1 + state.counts.value) * mult)); }
 function fmt(n) { n = Math.floor(n); if (n < 1000) return String(n); const u = ["", "K", "M", "B", "T", "Qa"]; let i = 0, v = n; while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; } return (v >= 100 ? v.toFixed(0) : v.toFixed(2)) + u[i]; }
 
@@ -33,169 +33,157 @@ const canvas = document.getElementById("scene");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xb6a079);
-scene.fog = new THREE.Fog(0xb6a079, 18, 42);
+scene.background = new THREE.Color(0xc4ad84);
+scene.fog = new THREE.Fog(0xc4ad84, 20, 48);
 
 const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 100);
-camera.position.set(7.5, 5.6, 8.4);
+camera.position.set(4.6, 5.8, 6.2);                 // front-above, looking into the jaw throat
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 2.4, 0); controls.enablePan = false; controls.enableDamping = true; controls.dampingFactor = 0.08;
-controls.minDistance = 6; controls.maxDistance = 18; controls.minPolarAngle = 0.2; controls.maxPolarAngle = 1.45;
+controls.target.set(0, 2.7, 0); controls.enablePan = false; controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 5; controls.maxDistance = 18; controls.minPolarAngle = 0.15; controls.maxPolarAngle = 1.4;
 
-scene.add(new THREE.HemisphereLight(0xe5d8bd, 0x6a5638, 1.25));
-const sun = new THREE.DirectionalLight(0xfff1d6, 1.35);
-sun.position.set(6, 11, 5); sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
-sun.shadow.camera.near = 1; sun.shadow.camera.far = 34;
-sun.shadow.camera.left = -11; sun.shadow.camera.right = 11; sun.shadow.camera.top = 11; sun.shadow.camera.bottom = -11;
+scene.add(new THREE.HemisphereLight(0xe7dcc2, 0x6a5236, 1.2));
+const sun = new THREE.DirectionalLight(0xfff0d2, 1.4);
+sun.position.set(5, 12, 6); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 40;
+sun.shadow.camera.left = -12; sun.shadow.camera.right = 12; sun.shadow.camera.top = 12; sun.shadow.camera.bottom = -12;
 sun.shadow.bias = -0.0004; scene.add(sun);
 
-const matSteel = new THREE.MeshStandardMaterial({ color: 0x6f5b48, roughness: 0.6, metalness: 0.45 });
-const matSteelDark = new THREE.MeshStandardMaterial({ color: 0x40362a, roughness: 0.7, metalness: 0.5 });
+// ---------------------------------------------------------------- materials + textures
+const matSteel = new THREE.MeshStandardMaterial({ color: 0x6c5b48, roughness: 0.7, metalness: 0.4 });
+const matSteelDark = new THREE.MeshStandardMaterial({ color: 0x3c3226, roughness: 0.8, metalness: 0.5 });
+const matSteelLt = new THREE.MeshStandardMaterial({ color: 0x877058, roughness: 0.6, metalness: 0.45 });
 const matGround = new THREE.MeshStandardMaterial({ color: 0xa98c5e, roughness: 1 });
-const matGravel = new THREE.MeshStandardMaterial({ color: 0xb29a72, roughness: 1, flatShading: true });
-
-// animated belt texture (so the conveyor visibly runs)
-function beltTexture() {
+function brickTex() {
+  const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d");
+  x.fillStyle = "#9a7a52"; x.fillRect(0, 0, 128, 128);
+  x.strokeStyle = "#7c5f3a"; x.lineWidth = 3;
+  for (let r = 0; r < 8; r++) { const y = r * 16; x.beginPath(); x.moveTo(0, y); x.lineTo(128, y); x.stroke(); const off = (r % 2) * 32; for (let bx = off; bx < 128; bx += 64) { x.beginPath(); x.moveTo(bx, y); x.lineTo(bx, y + 16); x.stroke(); } }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(8, 4); return t;
+}
+const matBrick = new THREE.MeshStandardMaterial({ map: brickTex(), roughness: 1 });
+function beltTex() {
   const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d");
-  x.fillStyle = "#2b231b"; x.fillRect(0, 0, 64, 64);
-  x.fillStyle = "#14100b"; for (let i = 0; i < 64; i += 16) x.fillRect(0, i, 64, 7);
+  x.fillStyle = "#2b231b"; x.fillRect(0, 0, 64, 64); x.fillStyle = "#14100b"; for (let i = 0; i < 64; i += 16) x.fillRect(0, i, 64, 7);
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(6, 1); return t;
 }
-const beltTex = beltTexture();
-const matBeltTop = new THREE.MeshStandardMaterial({ map: beltTex, roughness: 0.9, metalness: 0.1 });
+const beltTexture = beltTex();
+const matBelt = new THREE.MeshStandardMaterial({ map: beltTexture, roughness: 0.9 });
 
-const ground = new THREE.Mesh(new THREE.CircleGeometry(26, 48), matGround);
-ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+// ground + brick backdrop
+const ground = new THREE.Mesh(new THREE.CircleGeometry(28, 48), matGround); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+for (const [px, pz, ry] of [[-7, 0, Math.PI / 2], [0, -7, 0]]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(16, 9), matBrick); w.position.set(px, 4.5, pz); w.rotation.y = ry; w.receiveShadow = true; scene.add(w); }
 
-// shared rock geometry/material (solid boulders — coincident verts share displacement so faces don't tear)
+// ---------------------------------------------------------------- rock factory (solid boulders, grey/red quarry stone)
 function rockGeo() {
-  const g = new THREE.IcosahedronGeometry(1, 1);
-  const p = g.attributes.position, v = new THREE.Vector3(), cache = {};
-  for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i);
-    const key = v.x.toFixed(2) + "," + v.y.toFixed(2) + "," + v.z.toFixed(2);
-    let f = cache[key]; if (f === undefined) { f = 0.84 + Math.random() * 0.3; cache[key] = f; }
-    p.setXYZ(i, v.x * f, v.y * f, v.z * f);
-  }
+  const g = new THREE.IcosahedronGeometry(1, 1); const p = g.attributes.position, v = new THREE.Vector3(), cache = {};
+  for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); const k = v.x.toFixed(2) + "," + v.y.toFixed(2) + "," + v.z.toFixed(2); let f = cache[k]; if (f === undefined) { f = 0.84 + Math.random() * 0.3; cache[k] = f; } p.setXYZ(i, v.x * f, v.y * f, v.z * f); }
   g.computeVertexNormals(); return g;
 }
 const ROCK_GEOS = [rockGeo(), rockGeo(), rockGeo(), rockGeo(), rockGeo()];
-const ROCK_MATS = ROCK_COLORS.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1, metalness: 0, flatShading: true }));
-function rockMesh(radius, sx, sy, sz) {
-  const m = new THREE.Mesh(ROCK_GEOS[(Math.random() * ROCK_GEOS.length) | 0], ROCK_MATS[(Math.random() * ROCK_MATS.length) | 0]);
-  m.scale.set(radius * sx, radius * sy, radius * sz); m.castShadow = m.receiveShadow = true; return m;
-}
+const ROCK_MATS = ROCK_COLORS.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true }));
+function rockMesh(radius, sx, sy, sz) { const m = new THREE.Mesh(ROCK_GEOS[(Math.random() * ROCK_GEOS.length) | 0], ROCK_MATS[(Math.random() * ROCK_MATS.length) | 0]); m.scale.set(radius * sx, radius * sy, radius * sz); m.castShadow = m.receiveShadow = true; return m; }
 
-// ---------------------------------------------------------------- machine visuals
+// ---------------------------------------------------------------- jaw crusher (visual)
 const machine = new THREE.Group(); scene.add(machine);
-const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.6, 3.2), matSteelDark); baseMesh.position.y = 0.3; baseMesh.castShadow = baseMesh.receiveShadow = true; machine.add(baseMesh);
-const body = new THREE.Mesh(new THREE.BoxGeometry(2.9, 2.0, 2.6), matSteel); body.position.y = 1.4; body.castShadow = body.receiveShadow = true; machine.add(body);
-// すり鉢 (conical mortar bowl) — stones funnel to the centre and are ground at the bottom
-const SURI_TOP = 1.75, SURI_BOT = 0.42, SURI_YTOP = 3.55, SURI_YBOT = 2.2;
-const suribachi = new THREE.Mesh(new THREE.CylinderGeometry(SURI_TOP, SURI_BOT, SURI_YTOP - SURI_YBOT, 30, 1, true), new THREE.MeshStandardMaterial({ color: 0x6b6258, roughness: 1, metalness: 0.08, side: THREE.DoubleSide }));
-suribachi.position.y = (SURI_YTOP + SURI_YBOT) / 2; suribachi.receiveShadow = true; machine.add(suribachi);
-for (let k = 1; k <= 4; k++) { const f = k / 5; const ring = new THREE.Mesh(new THREE.TorusGeometry(SURI_BOT + f * (SURI_TOP - SURI_BOT), 0.03, 6, 30), matSteelDark); ring.position.y = SURI_YBOT + f * (SURI_YTOP - SURI_YBOT); ring.rotation.x = Math.PI / 2; machine.add(ring); }
-const holeDisk = new THREE.Mesh(new THREE.CircleGeometry(SURI_BOT * 0.95, 20), new THREE.MeshStandardMaterial({ color: 0x0c0805 })); holeDisk.rotation.x = -Math.PI / 2; holeDisk.position.y = SURI_YBOT + 0.03; machine.add(holeDisk);
+// heavy frame
+const frame = new THREE.Mesh(new THREE.BoxGeometry(2.9, 2.4, 2.7), matSteel); frame.position.y = 1.5; frame.castShadow = frame.receiveShadow = true; machine.add(frame);
+const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.5, 3.2), matSteelDark); baseMesh.position.set(0, 0.25, 0); baseMesh.castShadow = baseMesh.receiveShadow = true; machine.add(baseMesh);
+// mouth rim
+for (const sx of [-1, 1]) { const lip = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 2.6), matSteelLt); lip.position.set(sx * 1.15, 3.6, 0); machine.add(lip); }
+for (const sz of [-1, 1]) { const lip = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.5, 0.2), matSteelLt); lip.position.set(0, 3.6, sz * 1.3); lip.castShadow = true; machine.add(lip); }
 
-// conveyor (visual)
-const BELT_ANGLE = 0.34, BELT_C = new THREE.Vector3(2.5, 4.15, 0), BELT_HALF = 1.85;
-const cosB = Math.cos(BELT_ANGLE), sinB = Math.sin(BELT_ANGLE);
-const belt = new THREE.Mesh(new THREE.BoxGeometry(BELT_HALF * 2, 0.18, 1.5), matBeltTop);
-belt.position.copy(BELT_C); belt.rotation.z = BELT_ANGLE; belt.castShadow = belt.receiveShadow = true; scene.add(belt);
-for (const side of [-0.8, 0.8]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(BELT_HALF * 2, 0.34, 0.09), matSteelDark); rail.position.set(BELT_C.x, BELT_C.y + 0.22, side); rail.rotation.z = BELT_ANGLE; rail.castShadow = true; scene.add(rail); }
-for (const side of [-0.92, 0.92]) { const gd = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.55, 0.08), matSteelDark); gd.position.set(1.4, 3.2, side); gd.castShadow = true; scene.add(gd); }  // guide rails belt -> bin
-for (const e of [-1, 1]) { const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.5, 16), matSteelDark); roller.rotation.x = Math.PI / 2; roller.position.set(BELT_C.x + e * BELT_HALF * cosB, BELT_C.y + e * BELT_HALF * sinB, 0); scene.add(roller); }
+// toothed jaw plate (dir -1 = fixed/back-left, +1 = swing/front-right)
+const JAW_LEN = 2.2, JAW_TILT = 0.34;
+function makeJaw(dir) {
+  const g = new THREE.Group();
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.24, JAW_LEN, 2.3), matSteel); plate.castShadow = true; g.add(plate);
+  for (let i = -3; i <= 3; i++) { const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 2.2), matSteelDark); tooth.position.set(dir * -0.17, i * 0.3, 0); g.add(tooth); }
+  g.rotation.z = dir * -JAW_TILT;             // top tilts outward, bottom toward centre -> V
+  g.position.set(dir * 0.52, 2.6, 0);
+  machine.add(g); return g;
+}
+const fixedJaw = makeJaw(-1);
+const swingJaw = makeJaw(1);
+const swingBaseX = swingJaw.position.x;
+// side walls of the throat
+for (const sz of [-1, 1]) { const w = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.0, 0.18), matSteelDark); w.position.set(0, 2.7, sz * 1.18); machine.add(w); }
+// twin flywheels + shaft (side, spin)
+const flywheels = [];
+for (const sz of [-1.35, 1.35]) {
+  const fw = new THREE.Group(); fw.position.set(-0.2, 1.7, sz);
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.18, 24), matSteelDark); disc.rotation.x = Math.PI / 2; disc.castShadow = true; fw.add(disc);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.26, 12), matSteelLt); hub.rotation.x = Math.PI / 2; fw.add(hub);
+  for (let k = 0; k < 4; k++) { const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.7, 0.08), matSteel); spoke.rotation.z = k * Math.PI / 4; fw.add(spoke); }
+  machine.add(fw); flywheels.push(fw);
+}
+const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 3.0, 12), matSteelLt); shaft.rotation.x = Math.PI / 2; shaft.position.set(-0.2, 1.7, 0); machine.add(shaft);
+// draped chain
+for (let i = 0; i < 16; i++) { const t = i / 15; const link = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.045, 6, 10), matSteelDark); link.position.set(1.25 - t * 0.2, 3.7 - t * 2.2 + Math.sin(t * 3) * 0.1, 1.0 - t * 0.05); link.rotation.x = i % 2 ? 0 : Math.PI / 2; machine.add(link); }
 
-// hammer (swings down onto the bin on each strike)
-const hammer = new THREE.Group(); hammer.position.set(0, 3.95, 0.2); scene.add(hammer);
-const hHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8), new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.85 })); hHandle.position.y = -0.75; hammer.add(hHandle);
-const hHead = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.36, 0.36), matSteel); hHead.position.set(0, -1.5, 0); hHead.castShadow = true; hammer.add(hHead);
-let hammerT = 1;
-hammer.rotation.z = -1.0;
-hammer.visible = false;   // only shown while striking a tapped stone
-
-// workers (hired) — simple figures that swing when auto-hammering
+// worker platforms + workers along the long sides of the mouth
 const workerMatBody = new THREE.MeshStandardMaterial({ color: 0x9a6b3c, roughness: 1 });
 const workerMatHat = new THREE.MeshStandardMaterial({ color: 0xe0b44e, roughness: 1 });
+for (const sz of [-1.55, 1.55]) { const plat = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.15, 0.7), matSteelDark); plat.position.set(0, 3.35, sz); plat.castShadow = true; machine.add(plat); }
 const workers = [];
 function makeWorker() {
   const g = new THREE.Group();
-  const bodyM = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.5, 4, 8), workerMatBody); bodyM.position.y = 0.55; bodyM.castShadow = true; g.add(bodyM);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), workerMatHat); head.position.y = 1.02; head.castShadow = true; g.add(head);
-  const arm = new THREE.Group(); arm.position.set(0, 0.85, 0.18); g.add(arm);
-  const mallet = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6, 6), new THREE.MeshStandardMaterial({ color: 0x5a3f25, roughness: 0.9 })); mallet.position.set(0, -0.3, 0); arm.add(mallet);
-  const malletHead = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.15, 0.15), matSteel); malletHead.position.set(0, -0.6, 0); arm.add(malletHead);
-  arm.rotation.x = -1.2; g.userData.arm = arm; g.userData.swing = 1;
-  scene.add(g); return g;
+  const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.5, 4, 8), workerMatBody); b.position.y = 0.55; b.castShadow = true; g.add(b);
+  const h = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), workerMatHat); h.position.y = 1.0; h.castShadow = true; g.add(h);
+  const arm = new THREE.Group(); arm.position.set(0, 0.85, 0.15); g.add(arm);
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.9, 6), matSteelLt); bar.position.set(0, -0.45, 0); arm.add(bar);
+  arm.rotation.x = -1.1; g.userData.arm = arm; g.userData.swing = 1; scene.add(g); return g;
 }
-function ensureWorkers() {                 // workers stand around the hopper rim and hammer the jam
+function ensureWorkers() {
   const want = Math.min(state.counts.worker, 6);
   while (workers.length < want) workers.push(makeWorker());
   while (workers.length > want) scene.remove(workers.pop());
-  for (let i = 0; i < workers.length; i++) {
-    const ang = (i / Math.max(1, workers.length)) * Math.PI * 2 + 0.4;
-    workers[i].position.set(Math.cos(ang) * 1.25, 2.45, Math.sin(ang) * 1.25);
-    workers[i].lookAt(0, 2.9, 0);
-  }
+  for (let i = 0; i < workers.length; i++) { const sz = i % 2 ? 1.5 : -1.5; const col = Math.floor(i / 2); workers[i].position.set(-0.8 + col * 0.8, 3.45, sz); workers[i].lookAt(0, 2.6, 0); }
 }
+
+// conveyor feeding into the mouth from the back-left
+const BELT_HI = new THREE.Vector3(-4.6, 5.3, 0), BELT_LO = new THREE.Vector3(-0.6, 4.05, 0);
+const BELT_C = BELT_HI.clone().add(BELT_LO).multiplyScalar(0.5);
+const beltAlong = BELT_LO.clone().sub(BELT_HI); const BELT_HALF = beltAlong.length() / 2; beltAlong.normalize();
+const beltAngle = Math.atan2(beltAlong.y, beltAlong.x);
+const belt = new THREE.Mesh(new THREE.BoxGeometry(BELT_HALF * 2, 0.18, 1.5), matBelt); belt.position.copy(BELT_C); belt.rotation.z = beltAngle; belt.castShadow = belt.receiveShadow = true; scene.add(belt);
+for (const sz of [-0.8, 0.8]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(BELT_HALF * 2, 0.32, 0.09), matSteelDark); rail.position.set(BELT_C.x, BELT_C.y + 0.2, sz); rail.rotation.z = beltAngle; scene.add(rail); }
 
 // ---------------------------------------------------------------- physics
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -18, 0) });
-world.broadphase = new CANNON.SAPBroadphase(world); world.allowSleep = true;
-world.solver.iterations = 14;   // stable stacking -> no popcorn jitter
-const physGround = new CANNON.Material("g"), physRock = new CANNON.Material("r"), physBelt = new CANNON.Material("b");
-world.addContactMaterial(new CANNON.ContactMaterial(physRock, physGround, { friction: 0.7, restitution: 0 }));
-world.addContactMaterial(new CANNON.ContactMaterial(physRock, physRock, { friction: 0.6, restitution: 0 }));
-world.addContactMaterial(new CANNON.ContactMaterial(physRock, physBelt, { friction: 0.5, restitution: 0 }));
-
-const groundBody = new CANNON.Body({ mass: 0, material: physGround }); groundBody.addShape(new CANNON.Plane());
-groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2); world.addBody(groundBody);
-
-const beltBody = new CANNON.Body({ mass: 0, material: physBelt }); beltBody.addShape(new CANNON.Box(new CANNON.Vec3(BELT_HALF, 0.09, 0.75)));
-beltBody.position.set(BELT_C.x, BELT_C.y, 0); beltBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), BELT_ANGLE); world.addBody(beltBody);
-for (const side of [-0.82, 0.82]) { const rb = new CANNON.Body({ mass: 0, material: physBelt }); rb.addShape(new CANNON.Box(new CANNON.Vec3(BELT_HALF, 0.34, 0.06))); rb.position.set(BELT_C.x, BELT_C.y + 0.26, side); rb.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), BELT_ANGLE); world.addBody(rb); }
-
-// holding bin at the crusher mouth (rocks rest here to be hammered)
-function staticBox(px, py, pz, hx, hy, hz) { const b = new CANNON.Body({ mass: 0, material: physBelt }); b.addShape(new CANNON.Box(new CANNON.Vec3(hx, hy, hz))); b.position.set(px, py, pz); world.addBody(b); }
-// すり鉢 physics: a ring of angled walls forming the bowl + a floor at the centre
-for (let i = 0; i < 16; i++) {
-  const phi = (i + 0.5) / 16 * Math.PI * 2, cphi = Math.cos(phi), sphi = Math.sin(phi);
-  const topP = new THREE.Vector3(cphi * SURI_TOP, SURI_YTOP, sphi * SURI_TOP);
-  const botP = new THREE.Vector3(cphi * SURI_BOT, SURI_YBOT, sphi * SURI_BOT);
-  const center = topP.clone().add(botP).multiplyScalar(0.5);
-  const yAxis = topP.clone().sub(botP).normalize();
-  const zAxis = new THREE.Vector3().crossVectors(new THREE.Vector3(-sphi, 0, cphi), yAxis).normalize();
-  const xAxis = new THREE.Vector3().crossVectors(yAxis, zAxis).normalize();
-  const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis));
-  const chord = 2 * Math.tan(Math.PI / 16) * ((SURI_TOP + SURI_BOT) / 2) * 1.4;
-  const b = new CANNON.Body({ mass: 0, material: physBelt });
-  b.addShape(new CANNON.Box(new CANNON.Vec3(chord / 2, topP.distanceTo(botP) / 2, 0.07)));
-  b.position.set(center.x, center.y, center.z);
-  b.quaternion.set(q.x, q.y, q.z, q.w);
-  world.addBody(b);
-}
-staticBox(0, SURI_YBOT - 0.08, 0, SURI_BOT + 0.18, 0.12, SURI_BOT + 0.18);   // bowl floor (centre)
+world.broadphase = new CANNON.SAPBroadphase(world); world.allowSleep = true; world.solver.iterations = 14;
+const pG = new CANNON.Material("g"), pR = new CANNON.Material("r"), pS = new CANNON.Material("s");
+world.addContactMaterial(new CANNON.ContactMaterial(pR, pG, { friction: 0.7, restitution: 0 }));
+world.addContactMaterial(new CANNON.ContactMaterial(pR, pR, { friction: 0.6, restitution: 0 }));
+world.addContactMaterial(new CANNON.ContactMaterial(pR, pS, { friction: 0.5, restitution: 0 }));
+const groundBody = new CANNON.Body({ mass: 0, material: pG }); groundBody.addShape(new CANNON.Plane()); groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2); world.addBody(groundBody);
+function staticBox(px, py, pz, hx, hy, hz, rotZ) { const b = new CANNON.Body({ mass: 0, material: pS }); b.addShape(new CANNON.Box(new CANNON.Vec3(hx, hy, hz))); b.position.set(px, py, pz); if (rotZ) b.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), rotZ); world.addBody(b); }
+// jaw V (both plates static; the swing plate's motion is cosmetic), side walls, base catch
+staticBox(-0.52, 2.6, 0, 0.13, JAW_LEN / 2, 1.15, JAW_TILT);   // fixed jaw
+staticBox(0.52, 2.6, 0, 0.13, JAW_LEN / 2, 1.15, -JAW_TILT);   // swing jaw (static collider)
+staticBox(0, 2.7, 1.18, 1.0, 1.0, 0.09);                       // +Z wall
+staticBox(0, 2.7, -1.18, 1.0, 1.0, 0.09);                      // -Z wall
+// belt collider
+staticBox(BELT_C.x, BELT_C.y, 0, BELT_HALF, 0.09, 0.75, beltAngle);
+for (const sz of [-0.82, 0.82]) staticBox(BELT_C.x, BELT_C.y + 0.24, sz, BELT_HALF, 0.32, 0.06, beltAngle);
 
 // ---------------------------------------------------------------- rocks
 const rocks = [];
-function spawnRock(t = 0) {
-  if (rocks.length >= MAX_ROCKS) return;   // pause feeding when backed up (never delete a flowing stone)
+function spawnRock() {
+  if (rocks.length >= MAX_ROCKS) return;
   const tier = Math.min(8, Math.floor(state.crushed / 14));
-  const radius = 0.28 + Math.random() * 0.12 + Math.min(tier, 5) * 0.012;   // small enough to flow + fit the bin
+  const radius = 0.3 + Math.random() * 0.14 + Math.min(tier, 5) * 0.012;
   const sx = 0.8 + Math.random() * 0.45, sy = 0.7 + Math.random() * 0.35, sz = 0.8 + Math.random() * 0.45;
   const mesh = rockMesh(radius, sx, sy, sz); scene.add(mesh);
-  const body = new CANNON.Body({ mass: radius * radius * radius * 70, material: physRock, linearDamping: 0.3, angularDamping: 0.9, allowSleep: false });
-  body.addShape(new CANNON.Sphere(radius));   // spheres roll down the すり鉢 to the centre
-  const cx = BELT_C.x + cosB * BELT_HALF * (1 - 2 * t), cy = BELT_C.y + sinB * BELT_HALF * (1 - 2 * t);
-  body.position.set(cx - sinB * (radius + 0.12), cy + cosB * (radius + 0.12), (Math.random() - 0.5) * 0.5);
-  body.quaternion.setFromEuler(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
-  body.velocity.set(-cosB * beltSpeed, -sinB * beltSpeed, 0);
+  const body = new CANNON.Body({ mass: radius * radius * radius * 70, material: pR, linearDamping: 0.25, angularDamping: 0.7, allowSleep: false });
+  body.addShape(new CANNON.Sphere(radius));
+  body.position.set(BELT_HI.x + beltAlong.x * 0.4, BELT_HI.y + 0.4, (Math.random() - 0.5) * 0.6);
+  body.velocity.set(beltAlong.x * beltSpeed, beltAlong.y * beltSpeed, 0);
   world.addBody(body);
   rocks.push({ mesh, body, radius, grind: 0, hp: 2 + Math.min(3, Math.floor(tier / 3)) });
 }
@@ -204,48 +192,35 @@ function despawn(r) { const i = rocks.indexOf(r); if (i < 0) return; rocks.splic
 const frags = [];
 function spawnFragments(pos, radius) {
   for (let k = 0; k < 3; k++) {
-    const rr = radius * (0.32 + Math.random() * 0.3);
-    const mesh = rockMesh(rr, 0.8 + Math.random() * 0.4, 0.8 + Math.random() * 0.4, 0.8 + Math.random() * 0.4); scene.add(mesh);
-    const body = new CANNON.Body({ mass: rr * rr * rr * 70, material: physRock, angularDamping: 0.4 }); body.addShape(new CANNON.Sphere(rr));
-    body.position.set(pos.x + (Math.random() - 0.5) * 0.3, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 0.3);
-    const a = Math.random() * Math.PI * 2; body.velocity.set(Math.cos(a) * (0.4 + Math.random() * 0.9), 0.3 + Math.random() * 0.8, Math.sin(a) * (0.4 + Math.random() * 0.9));
-    world.addBody(body); frags.push({ mesh, body, life: 1.1 });
+    const rr = radius * (0.3 + Math.random() * 0.28); const mesh = rockMesh(rr, 1, 1, 1); scene.add(mesh);
+    const body = new CANNON.Body({ mass: rr * rr * rr * 70, material: pR, angularDamping: 0.4 }); body.addShape(new CANNON.Sphere(rr));
+    body.position.set(pos.x + (Math.random() - 0.5) * 0.2, pos.y - 0.1, pos.z + (Math.random() - 0.5) * 0.2);
+    body.velocity.set((Math.random() - 0.5) * 1.2, -Math.random() * 1.5, (Math.random() - 0.5) * 1.2);
+    world.addBody(body); frags.push({ mesh, body, life: 1.2 });
   }
 }
 function despawnFrag(f) { const i = frags.indexOf(f); if (i < 0) return; frags.splice(i, 1); scene.remove(f.mesh); world.removeBody(f.body); }
 
 // dust
 const dust = [];
-for (let i = 0; i < 30; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xd6be8e, transparent: true, opacity: 0, depthWrite: false })); m.visible = false; scene.add(m); dust.push({ m, life: 0, max: 1, vel: new THREE.Vector3() }); }
-function puff(pos, n) { let c = 0; for (const d of dust) { if (d.life > 0) continue; d.m.position.set(pos.x, pos.y, pos.z); d.m.scale.setScalar(0.1 + Math.random() * 0.13); d.vel.set((Math.random() - 0.5) * 2.4, Math.random() * 2.2, (Math.random() - 0.5) * 2.4); d.life = d.max = 0.45 + Math.random() * 0.4; d.m.material.opacity = 0.55; d.m.visible = true; if (++c >= n) break; } }
+for (let i = 0; i < 30; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xd8c191, transparent: true, opacity: 0, depthWrite: false })); m.visible = false; scene.add(m); dust.push({ m, life: 0, max: 1, vel: new THREE.Vector3() }); }
+function puff(pos, n) { let c = 0; for (const d of dust) { if (d.life > 0) continue; d.m.position.set(pos.x, pos.y, pos.z); d.m.scale.setScalar(0.1 + Math.random() * 0.13); d.vel.set((Math.random() - 0.5) * 2, Math.random() * 1.8, (Math.random() - 0.5) * 2); d.life = d.max = 0.45 + Math.random() * 0.4; d.m.material.opacity = 0.5; d.m.visible = true; if (++c >= n) break; } }
 
-// ---------------------------------------------------------------- hammer + breaking
+// ---------------------------------------------------------------- crushing
 const raycaster = new THREE.Raycaster();
-function inJam(p) { return p.x * p.x + p.z * p.z < 3.4 && p.y > 1.9 && p.y < 3.7; }   // stones inside the すり鉢 bowl
-function jamCount() { let n = 0; for (const r of rocks) { if (inJam(r.body.position)) n++; } return n; }
-function findTarget() {   // stone nearest the bowl centre/bottom (workers clear it from the middle out)
-  let best = null, bd = Infinity;
-  for (const r of rocks) { const p = r.body.position; if (!inJam(p)) continue; const d = p.x * p.x + (p.y - 2.3) * (p.y - 2.3) + p.z * p.z; if (d < bd) { bd = d; best = r; } }
-  return best;
-}
-function strikeRock(r) {
-  r.body.wakeUp();
-  r.body.applyImpulse(new CANNON.Vec3((Math.random() - 0.5) * 0.4, -r.body.mass * 1.6, (Math.random() - 0.5) * 0.4));
-  r.hp -= 1; puff(r.body.position, 5);
-  if (r.hp <= 0) breakRock(r);
-}
-function manualHammer(r) {   // hammer appears at the tapped stone and swings down on it
-  const p = r.body.position; hammer.position.set(p.x, p.y + 1.4, p.z); hammer.visible = true; hammerT = 0;
-  strikeRock(r);
-}
-function autoHammer() {      // hired workers smash stones in the bin
-  const r = findTarget(); if (!r) return;
-  for (const w of workers) w.userData.swing = 0;
-  strikeRock(r);
-}
+function inThroat(p) { return Math.abs(p.x) < 0.75 && Math.abs(p.z) < 1.05 && p.y > 1.7 && p.y < 3.4; }   // wedged in the jaw V
+function jamCount() { let n = 0; for (const r of rocks) if (inThroat(r.body.position)) n++; return n; }
+function findTarget() { let best = null, by = -Infinity; for (const r of rocks) { const p = r.body.position; if (inThroat(p) && p.y > by) { by = p.y; best = r; } } return best; }
+function strikeRock(r) { r.body.wakeUp(); r.body.applyImpulse(new CANNON.Vec3((Math.random() - 0.5) * 0.4, -r.body.mass * 1.6, (Math.random() - 0.5) * 0.4)); r.hp -= 1; puff(r.body.position, 5); if (r.hp <= 0) breakRock(r); }
+const hammer = new THREE.Group(); hammer.position.set(0, 3.9, 0.2); scene.add(hammer);
+const hH = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8), new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.85 })); hH.position.y = -0.75; hammer.add(hH);
+const hHead = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.34, 0.34), matSteel); hHead.position.y = -1.5; hHead.castShadow = true; hammer.add(hHead);
+let hammerT = 1; hammer.rotation.z = -1.0; hammer.visible = false;
+function manualHammer(r) { const p = r.body.position; hammer.position.set(p.x, p.y + 1.4, p.z); hammer.visible = true; hammerT = 0; strikeRock(r); }
+function autoHammer() { const r = findTarget(); if (!r) return; for (const w of workers) w.userData.swing = 0; strikeRock(r); }
 function breakRock(r) { state.money += gainPerCrush(); state.crushed += 1; spawnFragments(r.body.position, r.radius); puff(r.body.position, 9); despawn(r); setHUD(); }
 
-// ---------------------------------------------------------------- input (tap vs drag)
+// ---------------------------------------------------------------- input
 let downPos = null, downTime = 0;
 canvas.addEventListener("pointerdown", (e) => { downPos = { x: e.clientX, y: e.clientY }; downTime = performance.now(); });
 canvas.addEventListener("pointerup", (e) => {
@@ -265,42 +240,36 @@ document.querySelectorAll(".item").forEach((el) => el.addEventListener("click", 
 function setHUD() {
   $("money").textContent = fmt(state.money); $("crushed").textContent = fmt(state.crushed);
   $("feedrate").textContent = feedRate.toFixed(1); $("workers").textContent = state.counts.worker;
-  for (const id of ["feed", "belt", "worker", "value", "boss"]) {
-    $(id + "-own").textContent = "x" + state.counts[id]; $(id + "-cost").textContent = fmt(cost(id));
-    const el = document.querySelector('.item[data-id="' + id + '"]'); if (el) el.classList.toggle("afford", state.money >= cost(id));
-  }
+  for (const id of ["feed", "belt", "worker", "value", "boss"]) { $(id + "-own").textContent = "x" + state.counts[id]; $(id + "-cost").textContent = fmt(cost(id)); const el = document.querySelector('.item[data-id="' + id + '"]'); if (el) el.classList.toggle("afford", state.money >= cost(id)); }
 }
 
 // ---------------------------------------------------------------- loop
 const clock = new THREE.Clock();
 let feedTimer = 0, hammerTimer = 0, saveTimer = 0;
 function animate() {
-  const dt = Math.min(0.05, clock.getDelta());
+  const dt = Math.min(0.05, clock.getDelta()), t = clock.elapsedTime;
   world.step(1 / 60, dt, 4);
-  beltTex.offset.x += dt * (0.3 + beltSpeed * 0.4);   // belt runs toward the crusher (scales with speed)
+  beltTexture.offset.x += dt * (0.3 + beltSpeed * 0.4);
+  for (const fw of flywheels) fw.rotation.z += dt * 3.2;
+  swingJaw.position.x = swingBaseX + Math.sin(t * 6) * 0.05;     // cosmetic bite
 
-  feedTimer += dt; if (feedTimer >= 1 / feedRate) { feedTimer = 0; if (jamCount() < 7) spawnRock(); }   // backpressure: stop feeding a full jam (prevents belt overflow/spill)
+  feedTimer += dt; if (feedTimer >= 1 / feedRate) { feedTimer = 0; if (jamCount() < 8) spawnRock(); }
   if (autoHammerRate > 0) { hammerTimer += dt; const iv = 1 / autoHammerRate; while (hammerTimer >= iv) { hammerTimer -= iv; autoHammer(); } }
 
   for (let i = rocks.length - 1; i >= 0; i--) {
     const r = rocks[i], p = r.body.position;
-    if (p.x > 1.3 && p.x < 4.7 && p.y > 3.0 && p.y < 5.5 && Math.abs(p.z) < 1.0) {
-      const b = r.body, m = b.mass;                       // belt gently drives stones toward the crusher (stops before the bin so they don't fly out)
-      b.applyForce(new CANNON.Vec3((-cosB * beltSpeed - b.velocity.x) * m * 2.5, 0, -b.velocity.z * m * 2.5));
-      b.angularVelocity.x *= 0.7; b.angularVelocity.y *= 0.7; b.angularVelocity.z *= 0.7;
-    } else if (p.x * p.x + p.z * p.z < 0.55 && p.y > 1.9 && p.y < 2.9) {
-      r.grind += dt * GRIND_RATE;                          // the crusher grinds stones gathered at the bowl bottom
-      if (r.grind >= 1) { r.grind -= 1; r.hp -= 1; puff(p, 3); if (r.hp <= 0) { breakRock(r); continue; } }
-    }
-    if (p.y < 1.0 || p.x > 6 || p.x < -5 || Math.abs(p.z) > 4) { despawn(r); continue; }   // remove stones that escaped the play area
+    // belt carries stones toward the mouth
+    const onBelt = p.x < BELT_LO.x + 0.2 && p.x > BELT_HI.x - 0.3 && p.y > 3.7 && Math.abs(p.z) < 0.95;
+    if (onBelt) { const b = r.body, m = b.mass; b.applyForce(new CANNON.Vec3((beltAlong.x * beltSpeed - b.velocity.x) * m * 3, 0, -b.velocity.z * m * 3)); b.angularVelocity.x *= 0.7; b.angularVelocity.y *= 0.7; b.angularVelocity.z *= 0.7; }
+    else if (inThroat(p)) { r.grind += dt * GRIND_RATE; if (r.grind >= 1) { r.grind -= 1; r.hp -= 1; if (Math.random() < 0.5) puff(p, 2); if (r.hp <= 0) { breakRock(r); continue; } } }
+    if (p.y < 1.0 || p.x > 6 || p.x < -6 || Math.abs(p.z) > 4) { despawn(r); continue; }
     r.mesh.position.copy(p); r.mesh.quaternion.copy(r.body.quaternion);
   }
   for (let i = frags.length - 1; i >= 0; i--) { const f = frags[i]; f.life -= dt; if (f.life <= 0 || f.body.position.y < -2) { despawnFrag(f); continue; } f.mesh.position.copy(f.body.position); f.mesh.quaternion.copy(f.body.quaternion); }
 
-  // hammer + workers swing
   if (hammerT < 1) { hammerT = Math.min(1, hammerT + dt * 5); hammer.rotation.z = -1.0 + Math.sin(hammerT * Math.PI) * 1.3; if (hammerT >= 1) hammer.visible = false; }
-  for (const w of workers) { const s = w.userData; if (s.swing < 1) { s.swing = Math.min(1, s.swing + dt * 5); w.userData.arm.rotation.x = -1.2 + Math.sin(s.swing * Math.PI) * 1.4; } else w.userData.arm.rotation.x = -1.2; }
-  for (const d of dust) { if (d.life <= 0) continue; d.life -= dt; d.m.position.addScaledVector(d.vel, dt); d.vel.y -= dt * 1.5; d.m.scale.addScalar(dt * 1.7); d.m.material.opacity = Math.max(0, (d.life / d.max) * 0.55); if (d.life <= 0) d.m.visible = false; }
+  for (const w of workers) { const s = w.userData; if (s.swing < 1) { s.swing = Math.min(1, s.swing + dt * 5); w.userData.arm.rotation.x = -1.1 + Math.sin(s.swing * Math.PI) * 1.5; } else w.userData.arm.rotation.x = -1.1; }
+  for (const d of dust) { if (d.life <= 0) continue; d.life -= dt; d.m.position.addScaledVector(d.vel, dt); d.vel.y -= dt * 1.5; d.m.scale.addScalar(dt * 1.7); d.m.material.opacity = Math.max(0, (d.life / d.max) * 0.5); if (d.life <= 0) d.m.visible = false; }
 
   controls.update(); renderer.render(scene, camera);
   saveTimer += dt; if (saveTimer > 4) { saveTimer = 0; save(); }
@@ -312,6 +281,6 @@ function resize() { const w = window.innerWidth, h = window.innerHeight; camera.
 load(); recompute(); ensureWorkers(); resize();
 window.addEventListener("resize", resize);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") save(); });
-for (const t of [0.1, 0.3, 0.5, 0.7, 0.9]) spawnRock(t);
+for (let i = 0; i < 4; i++) spawnRock();
 const loadingEl = document.getElementById("loading"); if (loadingEl) loadingEl.classList.add("hidden");
 setHUD(); animate();
