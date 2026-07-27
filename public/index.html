@@ -2,81 +2,44 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Stone Jam Crusher / 石詰まり職人</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#15120d" />
+    <title>STONE JAM CRUSHER｜石くだき工場</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main class="app-shell">
-      <header class="hero">
-        <div>
-          <p class="eyebrow">Browser Prototype v0.2 / Desert Mood Pass</p>
-          <h1>Stone Jam Crusher <span>/ 石詰まり職人</span></h1>
-          <p class="lead">粉砕機を止めるな。石を読め。詰まりを抜け。</p>
-        </div>
-        <div class="status-card" aria-label="game status">
-          <div>
-            <span class="label">TIME</span>
-            <strong id="timeValue">60</strong>
+    <div id="wrap">
+      <canvas id="game" width="900" height="1000"></canvas>
+
+      <div id="ui">
+        <header id="hud">
+          <div class="hazard"></div>
+          <div class="row">
+            <div class="money"><span class="coin">¥</span><strong id="money">0</strong></div>
+            <div class="stat">解消 <b id="cleared">0</b></div>
           </div>
-          <div>
-            <span class="label">TONS</span>
-            <strong id="tonsValue">0.0t</strong>
-          </div>
-          <div>
-            <span class="label">JAM</span>
-            <strong id="jamValue">NONE</strong>
-          </div>
+        </header>
+
+        <div id="status" class="hidden"></div>
+
+        <div id="bottom">
+          <section id="shop">
+            <button class="up" data-up="hammer">🔨 <em id="hammer-lv">Lv1</em> <i id="hammer-cost">¥30</i></button>
+            <button class="up" data-up="worker">👷 <em id="worker-lv">0</em> <i id="worker-cost">¥90</i></button>
+            <button class="up" data-up="jaw">⚙️ <em id="jaw-lv">Lv1</em> <i id="jaw-cost">¥60</i></button>
+          </section>
+          <footer id="tools">
+            <button class="tool active" data-mode="hammer">🔨 ハンマー</button>
+            <button class="tool" data-mode="chain">⛓ チェーン</button>
+            <div class="hint" id="hint">詰まった岩をタップで砕け</div>
+          </footer>
         </div>
-      </header>
+      </div>
 
-      <section class="game-panel" aria-label="stone crusher game area">
-        <canvas id="gameCanvas" width="1200" height="620" aria-label="crusher line canvas"></canvas>
-        <div class="overlay-note">
-          <strong>DUSTY STATIC SCENE</strong>
-          <span>次のPRで石の流れ・詰まり判定・手動介入演出を追加</span>
-        </div>
-      </section>
+      <div id="loading">読み込み中…</div>
+    </div>
 
-      <section class="control-panel" aria-label="tool controls">
-        <button class="tool-button active" type="button" data-tool="hammer">
-          <span class="tool-icon">🔨</span>
-          <span>
-            <strong>Hammer</strong>
-            <small>叩いて割る</small>
-          </span>
-        </button>
-        <button class="tool-button" type="button" data-tool="hook">
-          <span class="tool-icon">⛓️</span>
-          <span>
-            <strong>Hook / Pull</strong>
-            <small>輪をかけて引く</small>
-          </span>
-        </button>
-        <button class="tool-button" type="button" data-tool="small-stone">
-          <span class="tool-icon">🪨</span>
-          <span>
-            <strong>Add Small Stone</strong>
-            <small>押し込み・悪化リスク</small>
-          </span>
-        </button>
-        <button class="tool-button" type="button" data-tool="stop">
-          <span class="tool-icon">⏸</span>
-          <span>
-            <strong>Stop / Restart</strong>
-            <small>安全だが稼働率低下</small>
-          </span>
-        </button>
-      </section>
-
-      <section class="design-note">
-        <h2>v0.2の狙い</h2>
-        <p>
-          砂漠の古い砕石場らしい色・質感へ寄せ、ジャムが起きる2つの危険点（チェーン/ホッパー喉）を視覚的に強調する。物理演算・解除ロジックは次段階で追加する。
-        </p>
-      </section>
-    </main>
-
-    <script src="./app.js"></script>
+    <script src="./vendor/matter.min.js"></script>
+    <script src="./app.js?v=3"></script>
   </body>
 </html>
